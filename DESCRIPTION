@@ -1,0 +1,40 @@
+Package: scSLIDE
+Type: Package
+Title: Single Cell Sketching and Landmark Integrated Dimensional Embedding
+Version: 0.1.0
+Authors@R: c(
+    person(given = "Longda", family = "Jiang", email = "ljiang@nygenome.org", role = c("aut", "cre"), comment = c(ORCID = "0000-0003-4964-6497"))
+    )
+Description: scSLIDE extends Seurat with advanced functionality for single-cell RNA sequencing analysis, 
+    including partial least squares (PLS) dimensionality reduction, enhanced sketching methods, 
+    trajectory analysis, and sample-level aggregation methods for large-scale single-cell datasets.
+License: MIT + file LICENSE
+URL: https://github.com/yourusername/scSLIDE
+BugReports: https://github.com/yourusername/scSLIDE/issues
+Depends:
+    R (>= 4.0.0),
+    Seurat (>= 5.0.0),
+    SeuratObject (>= 5.0.2)
+Imports:
+    methods,
+    Matrix,
+    pls,
+    spls,
+    glmGamPoi,
+    edgeR,
+    destiny,
+    ggplot2,
+    dplyr,
+    tidyr,
+    rlang,
+    stats,
+    utils,
+    RSpectra,
+    irlba
+Suggests:
+    knn.covertree,
+    testthat (>= 3.0.0)
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2
+Roxygen: list(markdown = TRUE)
