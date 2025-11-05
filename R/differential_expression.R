@@ -20,7 +20,7 @@
 #' @param min.count Minimum count threshold for gene filtering
 #' @param pseudocount.use Pseudocount to add to averaged expression values when calculating logFC. 1 by default.
 #' @param complete.resutls Whether to return complete results or summary
-#' @param ... additional parameters to be passed to glmGamPoi::glm_gp or edgeR::filterByExpr
+#' @param ... additional parameters to be passed to glmGamPoi::glm_gp or filterByExpr
 #'
 #' @return A data frame with differential expression results
 #' @export
@@ -33,11 +33,11 @@
 #' }
 #'
 #' @importFrom glmGamPoi glm_gp test_de
-#' @importFrom edgeR filterByExpr
-#' @importFrom stats model.matrix quantile
+#' @importFrom stats model.matrix quantile hat median
 #' @importFrom SeuratObject FetchData DefaultAssay Assays LayerData Layers
 #' @importFrom Seurat FoldChange
 #'
+
 TrajDETest <- function(object, ...) {
   UseMethod(generic = 'TrajDETest', object = object)
 }
@@ -122,7 +122,7 @@ TrajDETest.Assay <- function(
   # get the expression matrix
   data.use <- LayerData(object = object, layer = layer, cells = samples, features = features)
 
-  # use edgeR to remove very lowly-expressed genes
+  # use filterByExpr to remove very lowly-expressed genes
   idx_for_DE <- filterByExpr(data.use, min.count = min.count, min.prop = min.pct)
   idx_for_DE <- names(idx_for_DE)[which(idx_for_DE)]
 
@@ -187,7 +187,6 @@ TrajDETest.Seurat <- function(
     verbose = TRUE,
     ...
 ) {
-  requireNamespace("edgeR", quietly = FALSE)
   #
   assay <- assay %||% DefaultAssay(object = object)
   assay <- match.arg(arg = assay, choices = Assays(object = object))
@@ -391,3 +390,51 @@ QuickCorTest <- function(
     return(slct_genes_list)
   }
 }
+
+# Helper function: simplified cpm calculation
+cpm <- function(y, lib.size=NULL, log=FALSE, prior.count=2) {
+    if(is.null(lib.size)) lib.size <- colSums(y)
+    y <- as.matrix(y)
+    
+    if(log) {
+        t(log2(t(y + prior.count)/lib.size * 1e6))
+    } else {
+        t(t(y)/lib.size * 1e6)
+    }
+}
+
+# Simplified filterByExpr function (internal)
+filterByExpr <- function(y, design=NULL, group=NULL, lib.size=NULL, min.count=10, min.total.count=15, large.n=10, min.prop=0.7) {
+    y <- as.matrix(y)
+    if(mode(y) != "numeric") stop("y is not a numeric matrix")
+    if(is.null(lib.size)) lib.size <- colSums(y)
+    
+    # Minimum effective sample size for any of the coefficients
+    if(is.null(group)) {
+        if(is.null(design)) {
+            message("No group or design set. Assuming all samples belong to one group.")
+            MinSampleSize <- ncol(y)
+        } else {
+            h <- hat(design)
+            MinSampleSize <- 1/max(h)
+        }
+    } else {
+        group <- as.factor(group)
+        n <- tabulate(group)
+        MinSampleSize <- min(n[n > 0L])
+    }
+    if(MinSampleSize > large.n) MinSampleSize <- large.n + (MinSampleSize-large.n)*min.prop
+    
+    # CPM cutoff
+    MedianLibSize <- median(lib.size)
+    CPM.Cutoff <- min.count/MedianLibSize*1e6
+    CPM <- cpm(y, lib.size=lib.size)
+    tol <- 1e-14
+    keep.CPM <- rowSums(CPM >= CPM.Cutoff) >= (MinSampleSize - tol)
+    
+    # Total count cutoff
+    keep.TotalCount <- (rowSums(y) >= min.total.count - tol)
+    
+    keep.CPM & keep.TotalCount
+}
+

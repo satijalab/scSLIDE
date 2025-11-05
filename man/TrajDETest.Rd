@@ -73,7 +73,7 @@ TrajDETest(object, ...)
 \arguments{
 \item{object}{Expression data matrix, Assay, StdAssay, or Seurat object}
 
-\item{...}{additional parameters to be passed to glmGamPoi::glm_gp or edgeR::filterByExpr}
+\item{...}{additional parameters to be passed to glmGamPoi::glm_gp or filterByExpr}
 
 \item{traj.var}{a data frame containing the trajectory variable of the samples to be tested against}
 

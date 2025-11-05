@@ -21,7 +21,6 @@ Imports:
     pls,
     spls,
     glmGamPoi,
-    edgeR,
     destiny,
     ggplot2,
     dplyr,
