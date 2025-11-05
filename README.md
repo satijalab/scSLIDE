@@ -25,10 +25,10 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
 # Install Bioconductor dependencies first
-BiocManager::install(c("edgeR", "destiny"))
+BiocManager::install(c("glmGamPoi", "destiny"))
 
 # Install CRAN dependencies
-install.packages(c("pls", "spls", "glmGamPoi", "ggplot2", "dplyr", "tidyr", "RColorBrewer"))
+install.packages(c("pls", "spls", "ggplot2", "dplyr", "tidyr", "RColorBrewer"))
 
 # Install Seurat and SeuratObject
 install.packages("Seurat")
@@ -45,7 +45,6 @@ scSLIDE depends on:
 - **pls**: Partial least squares regression
 - **spls**: Sparse partial least squares
 - **glmGamPoi**: Gamma-Poisson regression for DE analysis
-- **edgeR**: Gene filtering and preprocessing
 - **destiny**: Diffusion map analysis
 - **ggplot2, dplyr, tidyr, RColorBrewer**: Visualization and data manipulation
 
