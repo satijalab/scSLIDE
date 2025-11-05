@@ -20,15 +20,21 @@ scSLIDE is an R package to perform sample-level analysis for multi-sample single
 ## Installation
 
 ```r
-# Install from GitHub (when available)
-# devtools::install_github("longmanz/scSLIDE")
+# Install BiocManager if not already installed
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
 
-# For now, install dependencies
-install.packages(c("pls", "spls", "glmGamPoi", "edgeR", "destiny", 
-                   "ggplot2", "dplyr", "tidyr", "RColorBrewer"))
+# Install Bioconductor dependencies first
+BiocManager::install(c("edgeR", "destiny"))
+
+# Install CRAN dependencies
+install.packages(c("pls", "spls", "glmGamPoi", "ggplot2", "dplyr", "tidyr", "RColorBrewer"))
 
 # Install Seurat and SeuratObject
 install.packages("Seurat")
+
+# Install scSLIDE from GitHub
+devtools::install_github("longmanz/scSLIDE")
 ```
 
 ## Dependencies
