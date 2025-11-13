@@ -95,8 +95,8 @@ RunPLS.default <- function(
     rownames(feature.loadings) <- rownames(object)[pls.results$A]
     cell.embeddings <- t(as.matrix(object[pls.results$A, ])) %*% feature.loadings
     colnames(cell.embeddings) <- paste0(reduction.key, 1:ncol(cell.embeddings))
-    stdev <- NULL
-    misc <- NULL
+    stdev <- numeric()
+    misc <- list()
   } else {
     feature.loadings <- unclass(pls.results$projection)
     colnames(feature.loadings) <- paste0(reduction.key, 1:ncol(feature.loadings))
