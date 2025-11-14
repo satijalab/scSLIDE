@@ -49,7 +49,7 @@ scSLIDE depends on:
 - **ggplot2, dplyr, tidyr, RColorBrewer**: Visualization and data manipulation
 
 ## Tutorial
-A tutorial for running the scSLIDE package is provided [here](https://longmanz.github.io/scSLIDE/). 
+A tutorial for running the scSLIDE package is provided [here](https://longmanz.github.io/scSLIDE/articles/scSLIDE_COVID19.html). 
 
 ## Citation
 
