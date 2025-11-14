@@ -24,11 +24,8 @@ scSLIDE is an R package to perform sample-level analysis for multi-sample single
 if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-# Install Bioconductor dependencies first
+# Install Bioconductor dependencies manually
 BiocManager::install(c("glmGamPoi", "destiny"))
-
-# Install CRAN dependencies
-install.packages(c("pls", "spls", "ggplot2", "dplyr", "tidyr", "RColorBrewer", "future"))
 
 # Install SeuratObject 
 install.packages("SeuratObject")
@@ -43,8 +40,8 @@ devtools::install_github("longmanz/scSLIDE")
 ## Dependencies
 
 scSLIDE depends on:
-- **Seurat** (>= 5.0.0): Core single-cell analysis framework
-- **SeuratObject** (>= 5.0.2): Seurat object structure
+- **Seurat** (>= 5.3.1): Core single-cell analysis framework
+- **SeuratObject** (>= 5.2.0): Seurat object structure
 - **pls**: Partial least squares regression
 - **spls**: Sparse partial least squares
 - **glmGamPoi**: Gamma-Poisson regression for DE analysis
