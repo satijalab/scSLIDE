@@ -78,7 +78,7 @@ The original file is in .h5ad [AnnData](https://anndata.readthedocs.io/en/stable
 \
 Note that before proceeding to the following workflow, if you want to annotate your single-cell .h5ad file with our Pan-Human Azimuth python tool, you can follow the simple instruction [provided here](https://satijalab.org/pan_human_azimuth/). 
 
-<details><summary style="font-size: 20px;"><strong>Click to see how to generate an on-disk Seurat object from .h5ad</strong></summary>
+<details><summary style="font-size: 20px;"><strong>Click here to see how to generate an on-disk Seurat object from .h5ad</strong></summary>
 
 ```{r message = FALSE, results = 'hide', warning = FALSE, eval = FALSE}
 # path to the h5ad file (assuming it has been annotated by the Pan-Human Azimuth python tool)
@@ -246,7 +246,7 @@ sample_obj = RunDiffusionMap(sample_obj, assay = "LMC", layer = "scale.data", fe
 
 By visualizing the Diffusion Map components, we can see that there seems to be a progression trajectory along DC1 and DC2 jointly.
 
-```{r fig.width=12, fig.height=6}
+```{r fig.width=7, fig.height=6}
 DimPlot(sample_obj, reduction = "DiffMap", group.by = "Disease") 
 ```
 
@@ -264,7 +264,7 @@ sample_obj[['traj_DC3']] = sample_obj@reductions$DiffMap@cell.embeddings[, 3]
 
 We can see that the first two DCs seem to represent a joint trajectory. We will fit a principal curve to them to infer a pseudo-trajectory curve.
 
-```{r message = FALSE, results = 'hide', warning = FALSE, fig.width=8, fig.height=6}
+```{r message = FALSE, results = 'hide', warning = FALSE, fig.width=7, fig.height=6}
 princurve_res = princurve::principal_curve(sample_obj[['DiffMap']]@cell.embeddings[, 1:2],
                                            plot = F, maxit = 20, trace = T)
 sample_obj[['traj_overall']] = princurve_res$lambda
@@ -275,7 +275,7 @@ DimPlot(sample_obj, reduction = "DiffMap", group.by = "Disease")  +
 
 The following plots show that the principal curve is related to the neuropathological continuous pseudo-progression score (CPS) provided by the original paper. The CPS values were obtained by aggregating different patient-level neuropathalogical measturements from their postmortem brains, and it is independent from their scRNA-seq data. 
 
-```{r message = FALSE, results = 'hide', warning = FALSE, fig.width=8, fig.height=6}
+```{r message = FALSE, results = 'hide', warning = FALSE, fig.width=7, fig.height=6}
 mdata <- sample_obj@meta.data
 mdata$bin_traj_overall <- cut(rank(mdata$traj_overall), breaks = 5, labels = paste0("traj-bin_", 1:5))
 # 
@@ -349,16 +349,20 @@ de_results = TrajDETest(sub_bulk_obj, assay = "RNA", layer = "counts",
 Now, for the DE results, we will identify the top up- and down-regulated DEGs for visualization:
 
 ```{r}
-# Identify the top up- and down-regulated DEGs for visualization
 de_results$sign = sign(de_results$beta_Traj)
 de_results = de_results[order(de_results$sign, de_results$p_Traj), ]
+
+# omit MT- and other non-coding DEGs for visualization
+de_results = de_results[!grepl("^(MT-|RP)", de_results$gene_ID), ]
+
+# Identify the top up- and down-regulated DEGs for visualization
 DEG_traj_overall = c(de_results$gene_ID[de_results$sign > 0][1:20],
             de_results$gene_ID[de_results$sign < 0][20:1])
 ```
 
 Heatmap visualization for this cell type:
 
-```{r message = FALSE, results = 'hide', warning = FALSE, fig.width=10, fig.height=8}
+```{r message = FALSE, results = 'hide', warning = FALSE, fig.width=9, fig.height=7}
 # Heatmap visualization for traj_overall (donors are ordered based on traj_overall)
 sub_bulk_obj = ScaleData(sub_bulk_obj, features = DEG_traj_overall)
 Scillus::plot_heatmap(dataset = sub_bulk_obj,
