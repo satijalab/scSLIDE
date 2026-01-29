@@ -4,4 +4,5 @@ pkgdown_sha: ~
 articles:
   scSLIDE_COVID19: scSLIDE_COVID19.html
   scSLIDE_SEA_AD: scSLIDE_SEA_AD.html
+  Using_customized_embedding: Using_customized_embedding.html
 last_built: 2025-12-08T21:57Z

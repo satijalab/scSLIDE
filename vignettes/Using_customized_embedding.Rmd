@@ -1,0 +1,72 @@
+---
+title: "Generate sample-level density matrix using custom embeddings"
+author: "Longda Jiang"
+date: "2026-01-28"
+output: html_document
+---
+
+By default, scSLIDE uses WNN embedding to create the sample-level density matrix. However, you can use your own custom embedding instead. For example, you might want to build the sample-level matrix using a harmony-corrected PCA space from your single-cell data. Below is a general workflow. Note that we skip the steps for creating the custom embedding, since this varies depending on the method you choose.
+
+```{r setup, eval=FALSE}
+library(Seurat) # make sure this is the scSLIDE-compatible version
+library(scSLIDE)
+library(AzimuthAPI)
+library(princurve)
+library(ggplot2)
+library(ggridges)
+library(Scillus)
+
+# set the future.globals.maxSize to 5GB
+options(future.globals.maxSize = 5 * 1000 * 1024^2)
+```
+
+### Load data and create custom embedding
+
+```{r message = FALSE, results = 'hide', warning = FALSE, eval=FALSE}
+object <- readRDS("Raw_count_Subset_104k_Ahern_2022_Cell.rds")
+object <- NormalizeData(object) 
+
+### Create your custom single-cell embedding here
+### For example, you could run harmony to integrate your data and use the 
+### harmony-corrected PCA embedding to generate the sample-level object
+### ...
+```
+
+### Create sample-level object using your custom embedding
+```{r message = FALSE, results = 'hide', warning = FALSE, eval=FALSE}
+## Let's say your custom embedding is called "user.embed" and is stored 
+## as a DimReduc object in your Seurat object.
+
+# 1. perform SketchData to get 5,000 landmarks from the object
+object = SketchData(object, assay = "RNA", ncells = 5000, sketched.assay = "LANDMARK",
+                    method = "LeverageScore", verbose = FALSE)
+
+# 2. extract those landmarks as a separate Seurat object (this makes step 3 easier to run)
+sketch_obj = subset(object, cells = colnames(object@assays$LANDMARK))
+
+# 3. find the k (k = 5) nearest landmarks for each cell based on this embedding 
+user.nn <- Seurat::FindNeighbors(object = sketch_obj@reductions$user.embed@cell.embeddings,
+                                query = object@reductions$user.embed@cell.embeddings,
+                                k.param = 5,
+                                return.neighbor = TRUE,
+                                l2.norm = TRUE, 
+                                verbose = T) 
+
+# 4. add the Neighbor object back to the original Seurat object
+object[['user.nn']] = user.nn
+
+# 5. generate a sample-level object using the 'user.nn' object
+sample_obj = GenerateSampleObject(object = object, 
+                               sketch.assay = "LANDMARK", 
+                               nn.name = "user.nn", 
+                               group.by = "Donor",  
+                               k.nn = 5, 
+                               normalization.method = "ChiSquared",
+                               add.meta.data = TRUE,
+                               return.seurat = T, 
+                               new_assay_name = "LMC")
+```
+
+You can now run standard downstream analyses on this sample-level object, as shown [here](https://satijalab.github.io/scSLIDE/articles/scSLIDE_COVID19.html).
+
+
