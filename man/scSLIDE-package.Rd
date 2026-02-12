@@ -38,8 +38,8 @@ trajectory analysis, and sample-level aggregation methods for large-scale single
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/yourusername/scSLIDE}
-  \item Report bugs at \url{https://github.com/yourusername/scSLIDE/issues}
+  \item \url{https://github.com/satijalab/scSLIDE}
+  \item Report bugs at \url{https://github.com/satijalab/scSLIDE/issues}
 }
 
 }

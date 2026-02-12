@@ -25,6 +25,8 @@
 #'   \item{RunAndProjectUMAP}{Generate and project UMAP embeddings}
 #' }
 #'
+#' @useDynLib scSLIDE, .registration = TRUE
+#' @importFrom Rcpp sourceCpp
 #' @keywords internal
 "_PACKAGE"
 

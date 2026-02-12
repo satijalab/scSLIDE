@@ -30,8 +30,13 @@ Imports:
     utils,
     RSpectra,
     irlba,
-    future
+    future,
+    Rcpp
+LinkingTo:
+    Rcpp,
+    RcppEigen
 Suggests:
+    BPCells,
     knn.covertree,
     testthat (>= 3.0.0)
 Encoding: UTF-8

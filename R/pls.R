@@ -272,3 +272,134 @@ RunPLS.Seurat <- function(
   object <- LogSeuratCommand(object = object)
   return(object)
 }
+
+
+#' Kernel Partial Least Squares
+#'
+#' Generic function for kernel-PLS. The \code{IterableMatrix} method computes
+#' kernel-PLS for BPCells on-disk matrices.
+#'
+#' @param X Predictor matrix (or an IterableMatrix).
+#' @param ... Arguments passed to methods.
+#' @export
+kernelpls <- function(X, ...) UseMethod("kernelpls")
+
+#' Kernel Partial Least Squares for IterableMatrix
+#'
+#' @description
+#' Compute kernel-PLS decomposition for large on-disk BPCells matrices using
+#' the algorithm of Dayal and MacGregor (1997).
+#'
+#' @param X An IterableMatrix (features x samples, the BPCells convention).
+#'   The transpose is handled internally.
+#' @param Y A matrix or vector of responses (samples x q).
+#' @param ncomp Integer; number of PLS components to compute.
+#' @param center Logical; whether to center X and Y (default \code{TRUE}).
+#' @param stripped Logical; if \code{TRUE} return only coefficients, Xmeans, and
+#'   Ymeans for speed (default \code{FALSE}).
+#' @param ... Additional arguments (currently unused).
+#'
+#' @return A list with components:
+#' \describe{
+#'   \item{coefficients}{Regression coefficients (p x q x ncomp array).}
+#'   \item{scores}{X-scores (n x ncomp matrix).}
+#'   \item{loadings}{X-loadings (p x ncomp matrix).}
+#'   \item{loading.weights}{Loading weights (p x ncomp matrix).}
+#'   \item{Yscores}{Y-scores (n x ncomp matrix).}
+#'   \item{Yloadings}{Y-loadings (q x ncomp matrix).}
+#'   \item{projection}{Projection matrix (p x ncomp matrix).}
+#'   \item{Xmeans}{Column means of X (length p).}
+#'   \item{Ymeans}{Column means of Y (length q).}
+#'   \item{fitted.values}{Fitted Y values (n x q x ncomp array).}
+#'   \item{residuals}{Residuals (n x q x ncomp array).}
+#'   \item{Xvar}{Variance explained in X per component (length ncomp).}
+#'   \item{Xtotvar}{Total variance in X (scalar).}
+#' }
+#' If \code{stripped = TRUE}, only \code{coefficients}, \code{Xmeans}, and
+#' \code{Ymeans} are returned.
+#'
+#' @details
+#' Implements the kernel-PLS algorithm (Dayal & MacGregor, 1997) for BPCells
+#' on-disk matrices. The large predictor matrix X is accessed from disk
+#' column-by-column; the response matrix Y is kept in memory.
+#'
+#' @references
+#' Dayal, B. S. and MacGregor, J. F. (1997) Improved PLS algorithms.
+#' \emph{Journal of Chemometrics}, \bold{11}, 73--85.
+#'
+#' @export
+#' @method kernelpls IterableMatrix
+kernelpls.IterableMatrix <- function(X, Y, ncomp, center = TRUE,
+                                      stripped = FALSE, ...) {
+  if (!requireNamespace("BPCells", quietly = TRUE)) {
+    rlang::abort("Package 'BPCells' is required for kernelpls.IterableMatrix but is not installed.")
+  }
+
+  if (!is.numeric(ncomp) || length(ncomp) != 1 || ncomp != as.integer(ncomp)) {
+    rlang::abort("ncomp must be a single whole number")
+  }
+  ncomp <- as.integer(ncomp)
+  if (ncomp <= 0) {
+    rlang::abort("ncomp must be a positive integer")
+  }
+
+  # Convert factor/character Y to a dummy indicator matrix
+  if (is.factor(Y) || is.character(Y)) {
+    Y <- stats::model.matrix(~ 0 + factor(Y))
+    colnames(Y) <- sub("^factor\\(Y\\)", "", colnames(Y))
+  }
+
+  Y <- as.matrix(Y)
+
+  if (!is.numeric(Y)) {
+    rlang::abort("Y must be numeric (or a factor/character vector for classification)")
+  }
+
+  # BPCells matrices are features x samples (p x n).
+  # The C++ code handles the transpose internally via the transpose flag.
+  # Determine n (samples) and p (features) from the stored layout:
+  #   If X@transpose is FALSE (default), stored as p x n -> n = ncol(X), p = nrow(X)
+  #   If X@transpose is TRUE, stored as n x p -> n = nrow(X), p = ncol(X)
+  n <- if (X@transpose) nrow(X) else ncol(X)
+  p <- if (X@transpose) ncol(X) else nrow(X)
+  q <- ncol(Y)
+
+  if (n != nrow(Y)) {
+    rlang::abort(sprintf("Number of samples in X (%d) must match nrow(Y) (%d)", n, nrow(Y)))
+  }
+  if (ncomp >= min(n, p)) {
+    rlang::abort(sprintf("ncomp must be less than min(n, p) = %d", min(n, p)))
+  }
+
+  # The transpose flag tells C++ whether to swap row/col semantics.
+  # BPCells default (features x samples) needs transpose=TRUE so that C++
+  # treats rows as features and columns as samples.
+  is_transposed <- !X@transpose
+
+  iterate_matrix <- getFromNamespace("iterate_matrix", "BPCells")
+  it <- X %>%
+    BPCells::convert_matrix_type("double") %>%
+    iterate_matrix()
+
+  result <- kernelpls_cpp(it, Y, as.integer(ncomp), center, stripped, is_transposed)
+
+  # Reshape 2D coefficient matrix to 3D array (p x q x ncomp)
+  comp_names <- paste(seq_len(ncomp), "comps")
+  result$coefficients <- array(result$coefficients, dim = c(p, q, ncomp),
+                               dimnames = list(NULL, NULL, comp_names))
+
+  if (!stripped) {
+    # Reshape fitted.values and residuals to 3D arrays (n x q x ncomp)
+    result$fitted.values <- array(result$fitted.values, dim = c(n, q, ncomp),
+                                  dimnames = list(NULL, NULL, comp_names))
+    result$residuals     <- array(result$residuals, dim = c(n, q, ncomp),
+                                  dimnames = list(NULL, NULL, comp_names))
+
+    # Add class attributes for compatibility with pls package conventions
+    class(result$scores)  <- class(result$Yscores) <- "scores"
+    class(result$loadings) <- class(result$loading.weights) <-
+      class(result$Yloadings) <- "loadings"
+  }
+
+  result
+}
