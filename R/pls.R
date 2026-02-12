@@ -129,6 +129,81 @@ RunPLS.default <- function(
 }
 
 #' @rdname RunPLS
+#' @method RunPLS IterableMatrix
+#' @export
+RunPLS.IterableMatrix <- function(
+    object,
+    assay = NULL,
+    ncomp = 20,
+    Y = NULL,
+    Y.add = NULL,
+    pls.function = c("plsr", "spls", "cppls"),
+    verbose = TRUE,
+    ndims.print = 1:5,
+    nfeatures.print = 30,
+    reduction.name = "pls",
+    reduction.key = "PLS_",
+    seed.use = 42,
+    eta = 0.5,
+    ...
+) {
+  pls.function <- match.arg(arg = pls.function)
+
+  if (!is.null(x = seed.use)) {
+    set.seed(seed = seed.use)
+  }
+
+  if (!is.null(Y.add)) {
+    warning("Y.add is not supported for IterableMatrix and will be ignored")
+  }
+  if (pls.function != 'plsr') {
+    rlang::abort(" Only pls.function = 'plsr' is supported for IterableMatrix currently")
+  }
+
+  n.samples <- if (object@transpose) nrow(object) else ncol(object)
+  n.features <- if (object@transpose) ncol(object) else nrow(object)
+  max.ncomp <- min(n.samples, n.features) - 1L
+  if (max.ncomp < 1L) {
+    rlang::abort("IterableMatrix must have at least 2 samples/features to run kernelpls.")
+  }
+  ncomp <- min(ncomp, max.ncomp)
+
+  Y_mat <- model.matrix(~. + 0, data = Y)
+  
+  pls.results <- kernelpls(X = object, Y = Y_mat, ncomp = ncomp, ...)
+
+  feature.loadings <- unclass(pls.results$projection)
+  colnames(feature.loadings) <- paste0(reduction.key, seq_len(ncol(feature.loadings)))
+  feature.names <- if (object@transpose) colnames(object) else rownames(object)
+  if (!is.null(feature.names) && length(feature.names) == nrow(feature.loadings)) {
+    rownames(feature.loadings) <- feature.names
+  }
+
+  cell.embeddings <- unclass(pls.results$scores)
+  colnames(cell.embeddings) <- paste0(reduction.key, seq_len(ncol(cell.embeddings)))
+  sample.names <- if (object@transpose) rownames(object) else colnames(object)
+  if (!is.null(sample.names) && length(sample.names) == nrow(cell.embeddings)) {
+    rownames(cell.embeddings) <- sample.names
+  }
+
+  stdev <- pls.results$Xvar
+  misc <- list()
+
+  reduction.data <- CreateDimReducObject(
+    embeddings = cell.embeddings,
+    loadings = feature.loadings,
+    stdev = stdev,
+    assay = assay,
+    key = reduction.key,
+    misc = misc
+  )
+  if (verbose) {
+    print(x = reduction.data, dims = ndims.print, nfeatures = nfeatures.print)
+  }
+  return(reduction.data)
+}
+
+#' @rdname RunPLS
 #' @method RunPLS Assay
 #' @export
 RunPLS.Assay <- function(
