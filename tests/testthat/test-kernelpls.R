@@ -39,11 +39,8 @@ compare_pls_results <- function(bp, ref, ncomp, tol = 1e-6) {
 # Helper: convert n x p dense matrix to BPCells IterableMatrix in features x samples layout.
 # The kernelpls wrapper transposes internally back to n x p.
 to_bp <- function(X_np) {
-  as(t(X_np), "dgCMatrix") |>
-    as("IterableMatrix")
+  as(as(t(X_np), "dgCMatrix"), "IterableMatrix")
 }
-
-
 test_that("kernel-PLS matches pls package: single response", {
   skip_if_not_installed("BPCells")
   skip_if_not_installed("pls")
