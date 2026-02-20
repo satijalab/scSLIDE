@@ -1,0 +1,6 @@
+CXX_STD = CXX17
+PKG_CXXFLAGS = -DRCPP_EIGEN -DEIGEN_PERMANENTLY_DISABLE_STUPID_WARNINGS
+OBJECTS = kernelpls_bridge.o \
+    bpcells/matrixIterators/KernelPLS.o \
+    bpcells/matrixIterators/MatrixStats.o \
+    RcppExports.o

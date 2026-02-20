@@ -3,6 +3,7 @@
 \name{RunPLS}
 \alias{RunPLS}
 \alias{RunPLS.default}
+\alias{RunPLS.IterableMatrix}
 \alias{RunPLS.Assay}
 \alias{RunPLS.StdAssay}
 \alias{RunPLS.Seurat}
@@ -11,6 +12,23 @@
 RunPLS(object, ...)
 
 \method{RunPLS}{default}(
+  object,
+  assay = NULL,
+  ncomp = 20,
+  Y = NULL,
+  Y.add = NULL,
+  pls.function = c("plsr", "spls", "cppls"),
+  verbose = TRUE,
+  ndims.print = 1:5,
+  nfeatures.print = 30,
+  reduction.name = "pls",
+  reduction.key = "PLS_",
+  seed.use = 42,
+  eta = 0.5,
+  ...
+)
+
+\method{RunPLS}{IterableMatrix}(
   object,
   assay = NULL,
   ncomp = 20,
