@@ -8,6 +8,8 @@
 
 #include "KernelPLS.h"
 
+#include <limits>
+
 #include <Eigen/Eigenvalues>
 
 namespace BPCells {
@@ -156,6 +158,14 @@ KernelPLSResult kernelpls(
 
         double tsq = t_a.squaredNorm();
 
+        // Guard against degenerate components (e.g. constant/zero columns or
+        // rank-deficient XtY): dividing by a near-zero tsq would produce Inf/NaN.
+        // Truncate to the components extracted so far and stop.
+        if (tsq < std::max(std::numeric_limits<double>::epsilon() * nobj, 1e-12)) {
+            ncomp = a;
+            break;
+        }
+
         // 4.4 Compute X-loadings: p_a = (X - Xmeans)^T * t_a / tsq  (p × 1)
         Eigen::VectorXd p_a = conceptualXtv(t_a);
         p_a /= tsq;
@@ -191,6 +201,18 @@ KernelPLSResult kernelpls(
 
             result.Xvar(a) = p_a.squaredNorm() * tsq;
         }
+    }
+
+    // Truncate working matrices to the number of components actually extracted
+    // (may be less than the requested ncomp when the tsq guard fires).
+    R_mat.conservativeResize(npred, ncomp);
+    P.conservativeResize(npred, ncomp);
+    tQ.conservativeResize(ncomp, nresp);
+    if (!stripped) {
+        result.scores.conservativeResize(nobj, ncomp);
+        result.Yscores.conservativeResize(nobj, ncomp);
+        result.loading_weights.conservativeResize(npred, ncomp);
+        result.Xvar.conservativeResize(ncomp);
     }
 
     // 5. Compute cumulative coefficients B[,,a] = R[,1:a] * tQ[1:a,]

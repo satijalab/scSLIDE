@@ -294,3 +294,32 @@ test_that("kernel-PLS output dimensions are correct", {
   expect_equal(length(result$Xvar), ncomp)
   expect_true(is.numeric(result$Xtotvar))
 })
+
+
+test_that("kernel-PLS tsq guard prevents Inf/NaN for degenerate (rank-deficient) X", {
+  skip_if_not_installed("BPCells")
+
+  set.seed(42)
+  n <- 40
+  p <- 6
+
+  # Rank-1 X: all columns are the same random vector; after 1 component is
+  # extracted, XtY deflates to near-zero and tsq -> 0.
+  v <- rnorm(n)
+  X <- matrix(rep(v, p), nrow = n, ncol = p)
+  Y <- matrix(rnorm(n), n, 1)
+  X_bp <- to_bp(X)
+
+  # Request more components than the rank; the guard should truncate silently.
+  result <- kernelpls(X_bp, Y, ncomp = 4)
+
+  # No Inf or NaN in any output
+  expect_false(any(is.nan(result$coefficients)))
+  expect_false(any(is.infinite(result$coefficients)))
+  expect_false(any(is.nan(result$scores)))
+  expect_false(any(is.infinite(result$scores)))
+
+  # The number of components actually extracted must be <= the requested count
+  actual_ncomp <- dim(result$scores)[2]
+  expect_lte(actual_ncomp, 4)
+})
