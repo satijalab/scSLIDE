@@ -56,7 +56,7 @@ A tutorial for running the scSLIDE package is provided [here](https://satijalab.
 If you use scSLIDE in your research, please cite:
 
 ```
-[Citation information to be added]
+https://doi.org/10.64898/2025.12.10.693462
 ```
 
 ## License
