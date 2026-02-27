@@ -12,6 +12,7 @@
 #include <Eigen/SVD>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace BPCells {
 
