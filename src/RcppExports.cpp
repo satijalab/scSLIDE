@@ -11,6 +11,25 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// cppls_cpp
+List cppls_cpp(SEXP matrix_X, Eigen::Map<Eigen::MatrixXd> Y, Eigen::Map<Eigen::MatrixXd> Y_add, int ncomp, bool center, bool stripped, bool transpose, double w_tol, double X_tol);
+RcppExport SEXP _scSLIDE_cppls_cpp(SEXP matrix_XSEXP, SEXP YSEXP, SEXP Y_addSEXP, SEXP ncompSEXP, SEXP centerSEXP, SEXP strippedSEXP, SEXP transposeSEXP, SEXP w_tolSEXP, SEXP X_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type matrix_X(matrix_XSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::MatrixXd> >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::MatrixXd> >::type Y_add(Y_addSEXP);
+    Rcpp::traits::input_parameter< int >::type ncomp(ncompSEXP);
+    Rcpp::traits::input_parameter< bool >::type center(centerSEXP);
+    Rcpp::traits::input_parameter< bool >::type stripped(strippedSEXP);
+    Rcpp::traits::input_parameter< bool >::type transpose(transposeSEXP);
+    Rcpp::traits::input_parameter< double >::type w_tol(w_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type X_tol(X_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(cppls_cpp(matrix_X, Y, Y_add, ncomp, center, stripped, transpose, w_tol, X_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
 // kernelpls_cpp
 List kernelpls_cpp(SEXP matrix_X, Eigen::Map<Eigen::MatrixXd> Y, int ncomp, bool center, bool stripped, bool transpose);
 RcppExport SEXP _scSLIDE_kernelpls_cpp(SEXP matrix_XSEXP, SEXP YSEXP, SEXP ncompSEXP, SEXP centerSEXP, SEXP strippedSEXP, SEXP transposeSEXP) {
@@ -29,6 +48,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_scSLIDE_cppls_cpp", (DL_FUNC) &_scSLIDE_cppls_cpp, 9},
     {"_scSLIDE_kernelpls_cpp", (DL_FUNC) &_scSLIDE_kernelpls_cpp, 6},
     {NULL, NULL, 0}
 };

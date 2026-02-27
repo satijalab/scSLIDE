@@ -153,24 +153,27 @@ RunPLS.IterableMatrix <- function(
     set.seed(seed = seed.use)
   }
 
-  if (!is.null(Y.add)) {
-    warning("Y.add is not supported for IterableMatrix and will be ignored")
-  }
-  if (pls.function != 'plsr') {
-    rlang::abort(" Only pls.function = 'plsr' is supported for IterableMatrix currently")
-  }
-
   n.samples <- if (object@transpose) nrow(object) else ncol(object)
   n.features <- if (object@transpose) ncol(object) else nrow(object)
   max.ncomp <- min(n.samples, n.features) - 1L
   if (max.ncomp < 1L) {
-    rlang::abort("IterableMatrix must have at least 2 samples/features to run kernelpls.")
+    rlang::abort("IterableMatrix must have at least 2 samples/features to run PLS.")
   }
   ncomp <- min(ncomp, max.ncomp)
 
   Y_mat <- model.matrix(~. + 0, data = Y)
-  
-  pls.results <- kernelpls(X = object, Y = Y_mat, ncomp = ncomp, ...)
+
+  if (pls.function == "cppls") {
+    pls.results <- cppls_ondisk(X = object, Y = Y_mat, Y.add = Y.add,
+                                ncomp = ncomp, ...)
+  } else if (pls.function == "plsr") {
+    if (!is.null(Y.add)) {
+      warning("Y.add is not supported for plsr/kernelpls and will be ignored")
+    }
+    pls.results <- kernelpls(X = object, Y = Y_mat, ncomp = ncomp, ...)
+  } else {
+    rlang::abort("Only pls.function = 'plsr' or 'cppls' is supported for IterableMatrix currently")
+  }
 
   feature.loadings <- unclass(pls.results$projection)
   colnames(feature.loadings) <- paste0(reduction.key, seq_len(ncol(feature.loadings)))
@@ -457,6 +460,152 @@ kernelpls.IterableMatrix <- function(X, Y, ncomp, center = TRUE,
     iterate_matrix()
 
   result <- kernelpls_cpp(it, Y, as.integer(ncomp), center, stripped, is_transposed)
+
+  # Reshape 2D coefficient matrix to 3D array (p x q x ncomp)
+  comp_names <- paste(seq_len(ncomp), "comps")
+  result$coefficients <- array(result$coefficients, dim = c(p, q, ncomp),
+                               dimnames = list(NULL, NULL, comp_names))
+
+  if (!stripped) {
+    # Reshape fitted.values and residuals to 3D arrays (n x q x ncomp)
+    result$fitted.values <- array(result$fitted.values, dim = c(n, q, ncomp),
+                                  dimnames = list(NULL, NULL, comp_names))
+    result$residuals     <- array(result$residuals, dim = c(n, q, ncomp),
+                                  dimnames = list(NULL, NULL, comp_names))
+
+    # Add class attributes for compatibility with pls package conventions
+    class(result$scores)  <- class(result$Yscores) <- "scores"
+    class(result$loadings) <- class(result$loading.weights) <-
+      class(result$Yloadings) <- "loadings"
+  }
+
+  result
+}
+
+
+#' CPLS (Canonical PLS) for On-Disk Matrices
+#'
+#' Generic function for CPLS. The \code{IterableMatrix} method computes
+#' CPLS for BPCells on-disk matrices.
+#'
+#' @param X Predictor matrix (or an IterableMatrix).
+#' @param ... Arguments passed to methods.
+#' @export
+cppls_ondisk <- function(X, ...) UseMethod("cppls_ondisk")
+
+#' CPLS (Canonical PLS) for IterableMatrix
+#'
+#' @description
+#' Compute CPLS decomposition for large on-disk BPCells matrices.
+#' CPLS uses canonical correlation analysis (CCA) to determine loading weights,
+#' which can improve performance with multi-response or mixed-type response data.
+#'
+#' @param X An IterableMatrix (features x samples, the BPCells convention).
+#'   The transpose is handled internally.
+#' @param Y A matrix or vector of primary responses (samples x q).
+#' @param Y.add A matrix of additional responses (samples x q_add), or NULL.
+#'   Y.add provides information that guides loading weights but does not
+#'   enter the regression coefficients.
+#' @param ncomp Integer; number of PLS components to compute.
+#' @param center Logical; whether to center X and Y (default \code{TRUE}).
+#' @param stripped Logical; if \code{TRUE} return only coefficients, Xmeans, and
+#'   Ymeans for speed (default \code{FALSE}).
+#' @param w.tol Numeric; threshold for zeroing small loading weights (default 0).
+#' @param X.tol Numeric; threshold for small-norm variable detection (default 1e-12).
+#' @param ... Additional arguments (currently unused).
+#'
+#' @return A list with components:
+#' \describe{
+#'   \item{coefficients}{Regression coefficients (p x q x ncomp array).}
+#'   \item{scores}{X-scores (n x ncomp matrix).}
+#'   \item{loadings}{X-loadings (p x ncomp matrix).}
+#'   \item{loading.weights}{Loading weights (p x ncomp matrix).}
+#'   \item{Yscores}{Y-scores (n x ncomp matrix).}
+#'   \item{Yloadings}{Y-loadings (q x ncomp matrix).}
+#'   \item{projection}{Projection matrix (p x ncomp matrix).}
+#'   \item{Xmeans}{Column means of X (length p).}
+#'   \item{Ymeans}{Column means of Y (length q).}
+#'   \item{fitted.values}{Fitted Y values (n x q x ncomp array).}
+#'   \item{residuals}{Residuals (n x q x ncomp array).}
+#'   \item{Xvar}{Variance explained in X per component (length ncomp).}
+#'   \item{Xtotvar}{Total variance in X (scalar).}
+#'   \item{gammas}{Power values per component (0.5 for all in this implementation).}
+#'   \item{canonical.correlations}{Squared canonical correlations per component.}
+#'   \item{A}{CCA weight vectors (q_full x ncomp matrix).}
+#'   \item{smallNorm}{Indices of near-zero-norm variables.}
+#' }
+#' If \code{stripped = TRUE}, only \code{coefficients}, \code{Xmeans},
+#' \code{Ymeans}, \code{gammas}, \code{canonical.correlations}, \code{A},
+#' and \code{smallNorm} are returned.
+#'
+#' @export
+#' @method cppls_ondisk IterableMatrix
+cppls_ondisk.IterableMatrix <- function(X, Y, Y.add = NULL, ncomp,
+                                         center = TRUE, stripped = FALSE,
+                                         w.tol = 0, X.tol = 1e-12, ...) {
+  if (!requireNamespace("BPCells", quietly = TRUE)) {
+    rlang::abort("Package 'BPCells' is required for cppls_ondisk.IterableMatrix but is not installed.")
+  }
+
+  if (!is.numeric(ncomp) || length(ncomp) != 1 || ncomp != as.integer(ncomp)) {
+    rlang::abort("ncomp must be a single whole number")
+  }
+  ncomp <- as.integer(ncomp)
+  if (ncomp <= 0) {
+    rlang::abort("ncomp must be a positive integer")
+  }
+
+  # Convert factor/character Y to a dummy indicator matrix
+  if (is.factor(Y) || is.character(Y)) {
+    Y <- stats::model.matrix(~ 0 + factor(Y))
+    colnames(Y) <- sub("^factor\\(Y\\)", "", colnames(Y))
+  }
+
+  Y <- as.matrix(Y)
+
+  if (!is.numeric(Y)) {
+    rlang::abort("Y must be numeric (or a factor/character vector for classification)")
+  }
+
+  # Handle Y.add
+  if (is.null(Y.add)) {
+    Y_add_mat <- matrix(0.0, nrow = nrow(Y), ncol = 0)
+  } else {
+    if (is.factor(Y.add) || is.character(Y.add)) {
+      Y.add <- stats::model.matrix(~ 0 + factor(Y.add))
+      colnames(Y.add) <- sub("^factor\\(Y\\.add\\)", "", colnames(Y.add))
+    }
+    Y_add_mat <- as.matrix(Y.add)
+    if (!is.numeric(Y_add_mat)) {
+      rlang::abort("Y.add must be numeric (or a factor/character vector)")
+    }
+    if (nrow(Y_add_mat) != nrow(Y)) {
+      rlang::abort(sprintf("nrow(Y.add) (%d) must match nrow(Y) (%d)",
+                           nrow(Y_add_mat), nrow(Y)))
+    }
+  }
+
+  # BPCells matrices are features x samples (p x n).
+  n <- if (X@transpose) nrow(X) else ncol(X)
+  p <- if (X@transpose) ncol(X) else nrow(X)
+  q <- ncol(Y)
+
+  if (n != nrow(Y)) {
+    rlang::abort(sprintf("Number of samples in X (%d) must match nrow(Y) (%d)", n, nrow(Y)))
+  }
+  if (ncomp >= min(n, p)) {
+    rlang::abort(sprintf("ncomp must be less than min(n, p) = %d", min(n, p)))
+  }
+
+  is_transposed <- !X@transpose
+
+  iterate_matrix <- getFromNamespace("iterate_matrix", "BPCells")
+  it <- X %>%
+    BPCells::convert_matrix_type("double") %>%
+    iterate_matrix()
+
+  result <- cppls_cpp(it, Y, Y_add_mat, as.integer(ncomp), center, stripped,
+                       is_transposed, as.double(w.tol), as.double(X.tol))
 
   # Reshape 2D coefficient matrix to 3D array (p x q x ncomp)
   comp_names <- paste(seq_len(ncomp), "comps")
