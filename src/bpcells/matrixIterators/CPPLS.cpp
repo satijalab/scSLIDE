@@ -401,8 +401,8 @@ CPPLSResult cppls(
         Eigen::MatrixXd P_a = P.leftCols(a + 1);
         Eigen::MatrixXd Q_a = Q.leftCols(a + 1);
         Eigen::MatrixXd PtW = P_a.transpose() * W_a;  // (a+1) × (a+1)
-        result.coefficients.block(0, a * nresp, npred, nresp) =
-            W_a * PtW.inverse() * Q_a.transpose();
+        Eigen::MatrixXd inv_PtW_Qt = PtW.partialPivLu().solve(Q_a.transpose());
+        result.coefficients.block(0, a * nresp, npred, nresp) = W_a * inv_PtW_Qt;
     }
 
     // 7. Compute fitted values, residuals, projection, and remaining outputs
@@ -414,7 +414,7 @@ CPPLSResult cppls(
 
         // projection = W * solve(P' * W)
         Eigen::MatrixXd PtW_full = P.transpose() * W;
-        result.projection = W * PtW_full.inverse();
+        result.projection = PtW_full.transpose().partialPivLu().solve(W.transpose()).transpose();
 
         // fitted = X_centered_orig * B  (using the original centered X, not deflated)
         // X_centered_orig = X - 1*Xmeans'
@@ -464,7 +464,9 @@ CPPLSResult cppls(
             Eigen::MatrixXd PtW_a = P_a.transpose() * W_a;
 
             // fitted_a = X_centered * B_a (without Ymeans)
-            Eigen::MatrixXd fitted_a = TT.leftCols(a + 1) * IpL_a * PtW_a.inverse() * Q_a.transpose();
+            Eigen::MatrixXd TIpL = TT.leftCols(a + 1) * IpL_a;
+            Eigen::MatrixXd inv_PtW_Qt = PtW_a.partialPivLu().solve(Q_a.transpose());
+            Eigen::MatrixXd fitted_a = TIpL * inv_PtW_Qt;
 
             // R code: fitted = fitted + Ymeans, residuals = -fitted + Yprim
             // So: fitted_final = X_centered*B + Ymeans
