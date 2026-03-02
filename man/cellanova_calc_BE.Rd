@@ -56,7 +56,9 @@ Default is NULL.}
 \item{verbose}{display progress + messages}
 }
 \value{
-Returns a Seurat object with a new assay added containing the batch-corrected expression matrix
+Returns a Seurat object with a new assay added containing the batch-corrected expression matrix.
+When the input layer is an on-disk BPCells IterableMatrix, the corrected assay is stored as a lazy
+BPCells transform (no data materialised to disk).
 }
 \description{
 CellAnova (Zhaojun Zhang et al, 2024 Nat Biotech) is a new method that can remove/mitigate batch effect in single-cell data
