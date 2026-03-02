@@ -16,6 +16,8 @@ cellanova_calc_BE(
   k_max = 1500,
   k_select = NULL,
   new.assay.name = "CORRECTED",
+  max_core = 1,
+  future.memory.per.core = 2000,
   verbose = TRUE
 )
 }
@@ -46,6 +48,10 @@ the basis of the batch effect. Default is 0.9.}
 Default is NULL.}
 
 \item{new.assay.name}{the name for the new assay to store the corrected expression matrix}
+
+\item{max_core}{the number of cores to use for parallel processing. Default is 1 (sequential).}
+
+\item{future.memory.per.core}{the maximum memory (in MB) allowed per core for parallel processing. Default is 2000.}
 
 \item{verbose}{display progress + messages}
 }
