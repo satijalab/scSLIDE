@@ -35,16 +35,20 @@
 #' @param verbose display progress + messages
 #' @return Returns a Seurat object with a new assay added containing the batch-corrected expression matrix
 #'
+#' @param max_core the number of cores to use for parallel processing. Default is 1 (sequential).
+#' @param future.memory.per.core the maximum memory (in MB) allowed per core for parallel processing. Default is 2000.
+#'
 #' @importFrom irlba irlba
 #' @importFrom RSpectra svds
 #' @importFrom Seurat DefaultAssay VariableFeatures Idents CellsByIdentities CreateAssayObject
 #' @importFrom SeuratObject LayerData Embeddings
+#' @importFrom future.apply future_lapply
 #' @importFrom methods slot slot<-
 #'
 
 cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data", integrate_key = NULL,
                               features = NULL, control_dict = NULL, reduction = NULL, var_cutoff = 0.9, k_max = 1500, k_select = NULL,
-                              new.assay.name = "CORRECTED", verbose = TRUE){
+                              new.assay.name = "CORRECTED", max_core = 1, future.memory.per.core = 2000, verbose = TRUE){
 
   # Input validation
   if (is.null(object) || !inherits(object, "Seurat")) {
@@ -120,24 +124,62 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
 
   ### regression 1: calculate the overall mean effect
   batch_list <- unique(object[[integrate_key]][colnames(object[[assay]]),1])
-  overall_bloc_coef <- list()
-  counter <- 0
-  for(d in batch_list){
-    if(length(cell_donor_list[[d]]) < 1) next()
 
-    LL_tmp <- LL[cell_donor_list[[d]], ]
-    rownames(LL_tmp) <- cell_donor_list[[d]]
-    #
-    qr_LL <- qr(LL_tmp)
-    # get the coef for all the m genes
-    GEX_mat <- LayerData(object = object[[assay]], layer = layer, cells = cell_donor_list[[d]])
+  # Extract the full expression matrix once (avoids repeated Seurat layer access)
+  GEX_full <- LayerData(object = object[[assay]], layer = layer)
+  # Pre-transpose once: tGEX_full is (n_cells x n_genes)
+  tGEX_full <- t(GEX_full)
 
-    coef <- qr.coef(qr_LL, t(GEX_mat))
-    overall_bloc_coef[[d]] <- t(coef)
-    counter <- counter + 1
-    if(isTRUE(verbose)) {
-      message("Done with processing ", d, " in 'integrate_key'")
+  # Set up future parallelization
+  original_plan <- future::plan()
+  user_has_custom_plan <- !inherits(original_plan, "sequential")
+  future_modified <- FALSE
+
+  if (!user_has_custom_plan) {
+    if (max_core > 1) {
+      if (isTRUE(verbose)) {
+        message("Setting up future multicore with ", max_core, " workers")
+        message("Setting future.globals.maxSize to ",
+                max_core * future.memory.per.core, " MB")
+      }
+      future::plan(future::multicore, workers = max_core)
+      options(future.globals.maxSize = max_core * future.memory.per.core * 1024^2)
+      future_modified <- TRUE
+    } else {
+      if (isTRUE(verbose)) {
+        message("Using sequential future plan (no parallelization)")
+      }
+      future::plan("sequential")
+      future_modified <- TRUE
     }
+  } else {
+    if (isTRUE(verbose)) {
+      message("Using user-specified future plan")
+    }
+  }
+
+  if (future_modified) {
+    on.exit({
+      future::plan(original_plan)
+      if (isTRUE(verbose)) message("Restored original future plan")
+    }, add = TRUE)
+  }
+
+  overall_bloc_coef <- future_lapply(batch_list, function(d) {
+    if (length(cell_donor_list[[d]]) < 1) return(NULL)
+    LL_tmp <- LL[cell_donor_list[[d]], , drop = FALSE]
+    qr_LL <- qr(LL_tmp)
+    tGEX_mat <- tGEX_full[cell_donor_list[[d]], , drop = FALSE]
+    t(qr.coef(qr_LL, tGEX_mat))
+  })
+  names(overall_bloc_coef) <- batch_list
+  overall_bloc_coef <- Filter(Negate(is.null), overall_bloc_coef)
+
+  # Free the transposed matrix — no longer needed
+  rm(tGEX_full)
+
+  if (isTRUE(verbose)) {
+    message("Done with regression for ", length(overall_bloc_coef), " batches in 'integrate_key'")
   }
   M_overall <- Reduce(`+`, overall_bloc_coef) / length(overall_bloc_coef)
 
@@ -175,43 +217,56 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
   ## Perform SVD decomposition for res_combined
   if(is.null(x = k_select)){
     k_max <- min(c(k_max, dim(res_combined) - 1))
-    
+
+    # Two-stage SVD: run a small pilot first to estimate k
+    k_pilot <- min(k_max, 100)
+
     if(isTRUE(verbose)) {
-      message("Performing SVD with k_max = ", k_max)
+      message("Performing pilot SVD with k_pilot = ", k_pilot)
     }
-    
-    # Use RSpectra for efficient truncated SVD
-    initial_svds <- RSpectra::svds(res_combined, k = k_max)
-    DD1 <- initial_svds$d
-    
-    # Calculate cumulative variance explained
+
+    pilot_svds <- RSpectra::svds(res_combined, k = k_pilot)
+    DD1 <- pilot_svds$d
+
+    # Calculate cumulative variance explained from pilot
     positive_sv <- DD1[DD1 > 0]
     if(length(positive_sv) == 0) {
       stop("No positive singular values found in SVD decomposition")
     }
-    
+
     variance <- cumsum(positive_sv^2) / sum(positive_sv^2)
     k <- which(variance >= var_cutoff)[1]
-    
-    if(is.na(x = k)) {
-      k <- length(positive_sv)
-      warning("Could not find k components explaining ", var_cutoff * 100, "% variance. Using all ", k, " components.")
+
+    if (is.na(k) || k > k_pilot) {
+      # Pilot was not enough — fall back to full k_max SVD
+      if(isTRUE(verbose)) {
+        message("Pilot SVD insufficient, performing full SVD with k_max = ", k_max)
+      }
+      final_svds <- RSpectra::svds(res_combined, k = k_max)
+      DD1 <- final_svds$d
+      positive_sv <- DD1[DD1 > 0]
+      variance <- cumsum(positive_sv^2) / sum(positive_sv^2)
+      k <- which(variance >= var_cutoff)[1]
+      if (is.na(k)) {
+        k <- length(positive_sv)
+        warning("Could not find k components explaining ", var_cutoff * 100, "% variance. Using all ", k, " components.")
+      }
+    } else {
+      final_svds <- pilot_svds
     }
-    
+
     if(isTRUE(verbose)) {
       message("Selected k = ", k, " components explaining ", round(variance[k] * 100, 2), "% variance")
     }
-    
-    final_svds <- initial_svds
   } else {
     k <- k_select
     if(k > min(dim(res_combined)) - 1) {
       k <- min(dim(res_combined)) - 1
       warning("k_select too large, reduced to ", k)
     }
-    
+
     final_svds <- RSpectra::svds(res_combined, k = k)
-    
+
     if(isTRUE(verbose)) {
       message("Using user-specified k = ", k, " components")
     }
@@ -232,17 +287,19 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
   }
 
   # Calculate batch effect using efficient matrix operations
-  original_data <- LayerData(object = object[[assay]], layer = layer)
-  
+  # Reuse GEX_full extracted before the regression loop (avoids duplicate LayerData call)
   # Compute residuals after removing overall mean effect
-  part1 <- original_data - tcrossprod(M_overall, LL)
-  
+  part1 <- GEX_full - tcrossprod(M_overall, LL)
+
   # Project onto batch effect subspace and back to compute batch effect
+  # The intermediate crossprod(VV1T, part1) is (k x cells), which is small
   be <- VV1T %*% crossprod(VV1T, part1)
+  rm(part1)
 
   # Apply correction by subtracting estimated batch effect
-  corrected <- original_data - be
-  
+  corrected <- GEX_full - be
+  rm(be, GEX_full)
+
   if(isTRUE(verbose)) {
     message("Creating corrected assay...")
   }
