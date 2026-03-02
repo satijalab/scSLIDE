@@ -78,6 +78,7 @@ cat("  Corrected data range:", round(range(corrected_dense), 4), "\n")
 cat("\n=== Setting up on-disk object ===\n")
 
 ondisk_dir <- file.path(tempdir(), "cellanova_test_ondisk")
+on.exit(unlink(ondisk_dir, recursive = TRUE), add = TRUE)
 if (dir.exists(ondisk_dir)) unlink(ondisk_dir, recursive = TRUE)
 dir.create(ondisk_dir, recursive = TRUE)
 
