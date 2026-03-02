@@ -19,7 +19,7 @@
 #' @param min.pct only test genes that are detected in a minimum fraction of min.pct cells in either of the two populations.
 #' @param min.count Minimum count threshold for gene filtering
 #' @param pseudocount.use Pseudocount to add to averaged expression values when calculating logFC. 1 by default.
-#' @param complete.resutls Whether to return complete results or summary
+#' @param complete.results Whether to return complete results or summary
 #' @param ... additional parameters to be passed to glmGamPoi::glm_gp or filterByExpr
 #'
 #' @return A data frame with differential expression results
@@ -127,8 +127,8 @@ TrajDETest.Assay <- function(
   idx_for_DE <- names(idx_for_DE)[which(idx_for_DE)]
 
   # calculate the log Fold change between the top and bottom groups along the trajectory
-  if(length(prob.break.point) < 1){
-    stop("Please provide a valid prob.break.point.")
+  if(length(prob.break.point) != 2){
+    stop("prob.break.point must be a numeric vector of length 2.")
   }
   # get the top and bottom groups
   quantiles <- quantile(traj.var[, 1], probs = prob.break.point)
@@ -136,11 +136,10 @@ TrajDETest.Assay <- function(
   idx_group_top <- rownames(traj.var)[traj.var[, 1] > quantiles[2]]
   # calculate the logFC
   fc.results <- FoldChange(object = LayerData(object = object, layer = 'data'),
-                           cells.1 = idx_group_bottom,
-                           cells.2 = idx_group_top,
+                           cells.1 = idx_group_top,
+                           cells.2 = idx_group_bottom,
                            mean.fxn = function(x) log(x = (SeuratObject::rowSums(x = expm1(x = x)) + pseudocount.use)/NCOL(x), base = 2),
                            fc.name = "avg_log2FC",
-                           pseudocount.use = pseudocount.use,
                            features = idx_for_DE)
   # update idx_for_DE
   if(logfc.threshold != 0){
@@ -183,7 +182,7 @@ TrajDETest.Seurat <- function(
     min.pct = 0.1,
     min.count = 10,
     pseudocount.use = 1,
-    complete.resutls = FALSE,
+    complete.results = FALSE,
     verbose = TRUE,
     ...
 ) {
@@ -237,7 +236,7 @@ TrajDETest.Seurat <- function(
   )
   #
   de.results <- de.results[order(de.results$p_Traj), ]
-  if(isTRUE(x = complete.resutls)){
+  if(isTRUE(x = complete.results)){
     return(de.results)
   } else {
     return(de.results[, c("gene_ID", "beta_Traj", "p_Traj", "adj_pval", "avg_log2FC", "pct.1", "pct.2")])
