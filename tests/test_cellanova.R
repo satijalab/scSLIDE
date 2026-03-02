@@ -180,8 +180,14 @@ if (max_diff < tol) {
   cat("PASS (with tolerance): Results are highly correlated (r =", format(cor_val, digits = 8),
       ") but max diff =", format(max_diff, scientific = TRUE), "\n")
 } else {
-  cat("FAIL: Results differ substantially. max diff =", format(max_diff, scientific = TRUE),
-      ", correlation =", format(cor_val, digits = 8), "\n")
+  fail_msg <- paste0(
+    "FAIL: Results differ substantially. max diff = ",
+    format(max_diff, scientific = TRUE),
+    ", correlation = ",
+    format(cor_val, digits = 8)
+  )
+  cat(fail_msg, "\n")
+  stop(fail_msg)
 }
 
 # Clean up
