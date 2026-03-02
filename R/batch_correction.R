@@ -32,23 +32,25 @@
 #' @param k_select the user-defined number of singular values and vectors to compute (override var_cutoff and k_max).
 #' Default is NULL.
 #' @param new.assay.name the name for the new assay to store the corrected expression matrix
-#' @param verbose display progress + messages
-#' @return Returns a Seurat object with a new assay added containing the batch-corrected expression matrix
-#'
 #' @param max_core the number of cores to use for parallel processing. Default is 1 (sequential).
 #' @param future.memory.per.core the maximum memory (in MB) allowed per core for parallel processing. Default is 2000.
+#' @param verbose display progress + messages
+#' @return Returns a Seurat object with a new assay added containing the batch-corrected expression matrix.
+#' When the input layer is an on-disk BPCells IterableMatrix, the corrected assay is stored as a lazy
+#' BPCells transform (no data materialised to disk).
 #'
 #' @importFrom irlba irlba
 #' @importFrom RSpectra svds
 #' @importFrom Seurat DefaultAssay VariableFeatures Idents CellsByIdentities CreateAssayObject
-#' @importFrom SeuratObject LayerData Embeddings
+#' @importFrom SeuratObject LayerData Embeddings CreateAssay5Object
 #' @importFrom future.apply future_lapply
-#' @importFrom methods slot slot<-
+#' @importFrom methods slot slot<- new
 #'
 
 cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data", integrate_key = NULL,
                               features = NULL, control_dict = NULL, reduction = NULL, var_cutoff = 0.9, k_max = 1500, k_select = NULL,
-                              new.assay.name = "CORRECTED", max_core = 1, future.memory.per.core = 2000, verbose = TRUE){
+                              new.assay.name = "CORRECTED", max_core = 1, future.memory.per.core = 2000,
+                              verbose = TRUE){
 
   # Input validation
   if (is.null(object) || !inherits(object, "Seurat")) {
@@ -87,8 +89,34 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
   if (length(features) == 0) {
     stop("No features found. Please specify features or ensure the assay has variable features or data.")
   }
-  
-  if(is.vector(control_dict)){
+
+  # Detect whether the layer is an on-disk BPCells IterableMatrix
+  GEX_full <- LayerData(object = object[[assay]], layer = layer)
+  ondisk <- inherits(GEX_full, "IterableMatrix")
+
+  if (ondisk && !requireNamespace("BPCells", quietly = TRUE)) {
+    stop("Package 'BPCells' is required for on-disk CellAnova correction. ",
+         "Please install it with: BiocManager::install('BPCells')")
+  }
+
+  # Check that the resulting matrix will not exceed R's 2^31-1 element limit (dense path only)
+  n_features <- length(features)
+  n_cells <- ncol(object[[assay]])
+  n_elements <- as.double(n_features) * as.double(n_cells)
+  if (!ondisk && n_elements > .Machine$integer.max) {
+    stop("The expression matrix (", n_features, " features x ", n_cells, " cells = ",
+         format(n_elements, big.mark = ",", scientific = FALSE), " elements) exceeds R's ",
+         "maximum dense matrix size (2^31 - 1 = ", format(.Machine$integer.max, big.mark = ","),
+         " elements). Many internal R and Seurat operations use 32-bit indexing and will fail ",
+         "on matrices this large. Consider reducing the number of cells (e.g., sketching) or ",
+         "features before running CellAnova.")
+  }
+
+  if (ondisk && isTRUE(verbose)) {
+    message("On-disk mode: BPCells IterableMatrix detected")
+  }
+
+  if(!is.list(control_dict)){
     control_dict <- list(g1 = control_dict)
   }
   control_groups <- names(control_dict)
@@ -125,10 +153,11 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
   ### regression 1: calculate the overall mean effect
   batch_list <- unique(object[[integrate_key]][colnames(object[[assay]]),1])
 
-  # Extract the full expression matrix once (avoids repeated Seurat layer access)
-  GEX_full <- LayerData(object = object[[assay]], layer = layer)
-  # Pre-transpose once: tGEX_full is (n_cells x n_genes)
-  tGEX_full <- t(GEX_full)
+  # GEX_full was already extracted above (during on-disk detection)
+  # For the dense path, pre-transpose once: tGEX_full is (n_cells x n_genes)
+  if (!ondisk) {
+    tGEX_full <- t(GEX_full)
+  }
 
   # Set up future parallelization
   original_plan <- future::plan()
@@ -165,18 +194,33 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
     }, add = TRUE)
   }
 
-  overall_bloc_coef <- future_lapply(batch_list, function(d) {
-    if (length(cell_donor_list[[d]]) < 1) return(NULL)
-    LL_tmp <- LL[cell_donor_list[[d]], , drop = FALSE]
-    qr_LL <- qr(LL_tmp)
-    tGEX_mat <- tGEX_full[cell_donor_list[[d]], , drop = FALSE]
-    t(qr.coef(qr_LL, tGEX_mat))
-  })
+  if (ondisk) {
+    # On-disk path: materialise each batch subset individually (no full transpose)
+    # Use sequential lapply — future::multicore cannot serialise IterableMatrix pointers
+    overall_bloc_coef <- lapply(batch_list, function(d) {
+      cells <- cell_donor_list[[d]]
+      if (length(cells) < 1) return(NULL)
+      LL_tmp <- LL[cells, , drop = FALSE]
+      qr_LL <- qr(LL_tmp)
+      # Materialise only this batch's subset from on-disk, then transpose
+      GEX_batch <- as.matrix(GEX_full[, cells, drop = FALSE])
+      tGEX_mat <- base::t(GEX_batch)
+      base::t(qr.coef(qr_LL, tGEX_mat))
+    })
+  } else {
+    # Dense path: use pre-transposed full matrix with future_lapply
+    overall_bloc_coef <- future_lapply(batch_list, function(d) {
+      if (length(cell_donor_list[[d]]) < 1) return(NULL)
+      LL_tmp <- LL[cell_donor_list[[d]], , drop = FALSE]
+      qr_LL <- qr(LL_tmp)
+      tGEX_mat <- tGEX_full[cell_donor_list[[d]], , drop = FALSE]
+      t(qr.coef(qr_LL, tGEX_mat))
+    })
+    # Free the transposed matrix — no longer needed
+    rm(tGEX_full)
+  }
   names(overall_bloc_coef) <- batch_list
   overall_bloc_coef <- Filter(Negate(is.null), overall_bloc_coef)
-
-  # Free the transposed matrix — no longer needed
-  rm(tGEX_full)
 
   if (isTRUE(verbose)) {
     message("Done with regression for ", length(overall_bloc_coef), " batches in 'integrate_key'")
@@ -286,41 +330,92 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
     message("Computing batch effect correction...")
   }
 
-  # Calculate batch effect using efficient matrix operations
-  # Reuse GEX_full extracted before the regression loop (avoids duplicate LayerData call)
-  # Compute residuals after removing overall mean effect
-  part1 <- GEX_full - tcrossprod(M_overall, LL)
+  if (ondisk) {
+    # =========================================================================
+    # On-disk path: lazy correction via BPCells TransformLinearResidual
+    # =========================================================================
+    # corrected = GEX_full - VV1T %*% (t(VV1T) %*% (GEX_full - M_overall %*% t(LL)))
+    #
+    # Rearranged as:  corrected = GEX_full - VV1T %*% correction_coef
+    # where correction_coef = t(VV1T) %*% GEX_full - t(VV1T) %*% M_overall %*% t(LL)
+    #
+    # This is exactly X - t(row_params) %*% col_params, which BPCells'
+    # TransformLinearResidual computes lazily (no full matrix materialised).
 
-  # Project onto batch effect subspace and back to compute batch effect
-  # The intermediate crossprod(VV1T, part1) is (k x cells), which is small
-  be <- VV1T %*% crossprod(VV1T, part1)
-  rm(part1)
+    tVV1T <- t(VV1T)  # (k x genes)
 
-  # Apply correction by subtracting estimated batch effect
-  corrected <- GEX_full - be
-  rm(be, GEX_full)
+    # proj = t(VV1T) %*% GEX_full  -->  (k x cells), computed by streaming GEX_full once
+    # BPCells: matrix %*% IterableMatrix returns a dense matrix
+    if (isTRUE(verbose)) message("  Computing projection (streaming on-disk data)...")
+    proj <- tVV1T %*% GEX_full  # (k x cells)
 
-  if(isTRUE(verbose)) {
-    message("Creating corrected assay...")
+    # small_term = t(VV1T) %*% M_overall %*% t(LL)  -->  (k x cells) via tiny intermediates
+    small_term <- (tVV1T %*% M_overall) %*% base::t(LL)  # (k x n_pcs) %*% (n_pcs x cells)
+
+    # correction_coef = proj - small_term  -->  (k x cells)
+    correction_coef <- proj - small_term
+    rm(proj, small_term, tVV1T)
+
+    # Build lazy IterableMatrix: corrected = GEX_full - t(row_params) %*% col_params
+    row_params <- base::t(VV1T)   # (k x genes)
+    col_params <- correction_coef  # (k x cells)
+
+    if(isTRUE(verbose)) {
+      message("Creating corrected assay (lazy on-disk transform)...")
+    }
+
+    corrected <- new("TransformLinearResidual",
+      matrix = BPCells::convert_matrix_type(GEX_full, "double"),
+      transpose = GEX_full@transpose,
+      dim = GEX_full@dim,
+      dimnames = dimnames(GEX_full),
+      row_params = row_params,
+      col_params = col_params,
+      global_params = numeric(0),
+      vars_to_regress = character(0)
+    )
+
+    new.assay <- CreateAssay5Object(data = corrected)
+    object[[new.assay.name]] <- new.assay
+
+  } else {
+    # =========================================================================
+    # Dense (in-memory) path — original logic
+    # =========================================================================
+    # Compute residuals after removing overall mean effect
+    part1 <- GEX_full - tcrossprod(M_overall, LL)
+
+    # Project onto batch effect subspace and back to compute batch effect
+    # The intermediate crossprod(VV1T, part1) is (k x cells), which is small
+    be <- VV1T %*% crossprod(VV1T, part1)
+    rm(part1)
+
+    # Apply correction by subtracting estimated batch effect
+    corrected <- GEX_full - be
+    rm(be, GEX_full)
+
+    if(isTRUE(verbose)) {
+      message("Creating corrected assay...")
+    }
+
+    # Create new assay with corrected data
+    new.assay <- suppressWarnings(
+      expr = CreateAssayObject(
+        data = corrected,
+        min.cells = -Inf,
+        min.features = -Inf,
+        check.matrix = FALSE
+      )
+    )
+
+    # Add corrected assay to object
+    object[[new.assay.name]] <- new.assay
   }
 
-  # Create new assay with corrected data
-  new.assay <- suppressWarnings(
-    expr = CreateAssayObject(
-      data = corrected,
-      min.cells = -Inf,
-      min.features = -Inf,
-      check.matrix = FALSE
-    )
-  )
-  
-  # Add corrected assay to object
-  object[[new.assay.name]] <- new.assay
-  
   if(isTRUE(verbose)) {
     message("Batch correction completed. New assay '", new.assay.name, "' added to object.")
   }
-  
+
   return(object)
 }
 
