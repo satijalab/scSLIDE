@@ -100,8 +100,8 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
   }
 
   # Check that the resulting matrix will not exceed R's 2^31-1 element limit (dense path only)
-  n_features <- length(features)
-  n_cells <- ncol(object[[assay]])
+  n_features <- nrow(GEX_full)
+  n_cells <- ncol(GEX_full)
   n_elements <- as.double(n_features) * as.double(n_cells)
   if (!ondisk && n_elements > .Machine$integer.max) {
     stop("The expression matrix (", n_features, " features x ", n_cells, " cells = ",
