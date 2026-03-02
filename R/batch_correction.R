@@ -167,11 +167,19 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
   if (!user_has_custom_plan) {
     if (max_core > 1) {
       if (isTRUE(verbose)) {
-        message("Setting up future multicore with ", max_core, " workers")
+        if (.Platform$OS.type == "windows") {
+          message("Setting up future multisession with ", max_core, " workers (Windows)")
+        } else {
+          message("Setting up future multicore with ", max_core, " workers")
+        }
         message("Setting future.globals.maxSize to ",
                 max_core * future.memory.per.core, " MB")
       }
-      future::plan(future::multicore, workers = max_core)
+      if (.Platform$OS.type == "windows") {
+        future::plan(future::multisession, workers = max_core)
+      } else {
+        future::plan(future::multicore, workers = max_core)
+      }
       options(future.globals.maxSize = max_core * future.memory.per.core * 1024^2)
       future_modified <- TRUE
     } else {
