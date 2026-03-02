@@ -267,6 +267,11 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
   gc()  # Force garbage collection
 
   ## Perform SVD decomposition for res_combined
+  # Compute true total variance (Frobenius norm squared = sum of ALL singular values squared)
+  # This is needed because truncated SVD only returns the top-k singular values,
+  # so sum(top_k_sv^2) / sum(top_k_sv^2) always reaches 1.0 at the last component.
+  total_var <- sum(res_combined^2)
+
   if(is.null(x = k_select)){
     k_max <- min(c(k_max, dim(res_combined) - 1))
 
@@ -286,7 +291,7 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
       stop("No positive singular values found in SVD decomposition")
     }
 
-    variance <- cumsum(positive_sv^2) / sum(positive_sv^2)
+    variance <- cumsum(positive_sv^2) / total_var
     k <- which(variance >= var_cutoff)[1]
 
     if (is.na(k) || k > k_pilot) {
@@ -297,7 +302,7 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
       final_svds <- RSpectra::svds(res_combined, k = k_max)
       DD1 <- final_svds$d
       positive_sv <- DD1[DD1 > 0]
-      variance <- cumsum(positive_sv^2) / sum(positive_sv^2)
+      variance <- cumsum(positive_sv^2) / total_var
       k <- which(variance >= var_cutoff)[1]
       if (is.na(k)) {
         k <- length(positive_sv)
