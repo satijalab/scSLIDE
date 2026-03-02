@@ -25,6 +25,7 @@ RunPLS(object, ...)
   reduction.key = "PLS_",
   seed.use = 42,
   eta = 0.5,
+  save.model = FALSE,
   ...
 )
 
@@ -42,6 +43,7 @@ RunPLS(object, ...)
   reduction.key = "PLS_",
   seed.use = 42,
   eta = 0.5,
+  save.model = FALSE,
   ...
 )
 
@@ -60,6 +62,7 @@ RunPLS(object, ...)
   reduction.key = "PLS_",
   seed.use = 42,
   eta = 0.5,
+  save.model = FALSE,
   ...
 )
 
@@ -79,6 +82,7 @@ RunPLS(object, ...)
   reduction.key = "PLS_",
   seed.use = 42,
   eta = 0.5,
+  save.model = FALSE,
   ...
 )
 
@@ -97,6 +101,7 @@ RunPLS(object, ...)
   reduction.key = "PLS_",
   seed.use = 42,
   eta = 0.5,
+  save.model = FALSE,
   ...
 )
 }
@@ -131,6 +136,8 @@ the number for the dimension names.}
 \item{seed.use}{Set a random seed.  Setting NULL will not set a seed.}
 
 \item{eta}{Thresholding parameter that controls the sparsity of the spls method (larger --> sparser). eta should be between 0 and 1.}
+
+\item{save.model}{Logical; if TRUE, save model components (coefficients, Xmeans, Ymeans) into the misc slot for later prediction. Default FALSE.}
 
 \item{features}{Features to compute PLS on}
 
