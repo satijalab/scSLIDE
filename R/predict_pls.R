@@ -55,6 +55,11 @@ if (is.null(object@misc$model)) {
          "Re-run RunPLS() with save.model = TRUE.")
   }
 
+  # Dispatch to on-disk path if newdata is a BPCells IterableMatrix
+  if (inherits(newdata, "IterableMatrix")) {
+    return(.predict_pls_iterable(object, newdata, ncomp))
+  }
+
   # Extract model components
   coefficients <- object@misc$model$coefficients
   Xmeans <- object@misc$model$Xmeans
@@ -172,9 +177,21 @@ PredictPLS.Seurat <- function(
          if (length(missing.features) > 5) ", ..." else "")
   }
 
-  new.mat <- t(as.matrix(
-    LayerData(newdata[[assay]], layer = layer)[features, ]
-  ))
+  layer.data <- LayerData(newdata[[assay]], layer = layer)
+
+  if (inherits(layer.data, "IterableMatrix")) {
+    # Subset features lazily (features x samples layout), pass through
+    new.mat <- layer.data[features, ]
+    return(PredictPLS.DimReduc(
+      object = reduction.obj,
+      newdata = new.mat,
+      ncomp = ncomp,
+      ...
+    ))
+  }
+
+  # Dense path: materialise and transpose to cells x features
+  new.mat <- t(as.matrix(layer.data[features, ]))
 
   # Delegate to DimReduc method
   PredictPLS.DimReduc(
@@ -183,4 +200,114 @@ PredictPLS.Seurat <- function(
     ncomp = ncomp,
     ...
   )
+}
+
+# Internal helper: predict from PLS model using BPCells IterableMatrix (on-disk)
+# newdata is an IterableMatrix; prediction uses C++ bridge to avoid materialisation.
+.predict_pls_iterable <- function(object, newdata, ncomp) {
+  if (!requireNamespace("BPCells", quietly = TRUE)) {
+    stop("Package 'BPCells' is required for IterableMatrix prediction but is not installed.")
+  }
+
+  # Extract model components
+  coefficients <- object@misc$model$coefficients
+  Xmeans <- object@misc$model$Xmeans
+  Ymeans <- object@misc$model$Ymeans
+  model.features <- rownames(Loadings(object))
+  p <- dim(coefficients)[1]
+
+  # Feature alignment
+  # BPCells default: features x samples (@transpose = FALSE)
+  if (newdata@transpose) {
+    feat.names <- colnames(newdata)
+  } else {
+    feat.names <- rownames(newdata)
+  }
+
+  if (length(model.features) > 0 && !is.null(feat.names)) {
+    missing.features <- setdiff(model.features, feat.names)
+    if (length(missing.features) > 0) {
+      stop("newdata is missing ", length(missing.features),
+           " features required by the model: ",
+           paste(head(missing.features, 5), collapse = ", "),
+           if (length(missing.features) > 5) ", ..." else "")
+    }
+    # Subset/reorder lazily
+    if (newdata@transpose) {
+      newdata <- newdata[, model.features]
+    } else {
+      newdata <- newdata[model.features, ]
+    }
+  } else {
+    n.feat <- if (newdata@transpose) ncol(newdata) else nrow(newdata)
+    if (n.feat != p) {
+      stop("newdata has ", n.feat,
+           " features but model expects ", p, " features")
+    }
+  }
+
+  # Determine transpose flag (same convention as kernelpls.IterableMatrix)
+  is_transposed <- !newdata@transpose
+
+  # Get sample count and names
+  if (newdata@transpose) {
+    n.samples <- nrow(newdata)
+    sample.names <- rownames(newdata)
+  } else {
+    n.samples <- ncol(newdata)
+    sample.names <- colnames(newdata)
+  }
+
+  # Validate ncomp
+  ncomp_max <- dim(coefficients)[3]
+  if (is.null(ncomp)) {
+    ncomp <- ncomp_max
+  }
+  if (any(ncomp < 1) || any(ncomp > ncomp_max)) {
+    stop("ncomp values must be between 1 and ", ncomp_max)
+  }
+
+  q <- length(Ymeans)
+  iterate_matrix <- getFromNamespace("iterate_matrix", "BPCells")
+
+  if (length(ncomp) == 1) {
+    B <- coefficients[, , ncomp, drop = FALSE]
+    dim(B) <- dim(B)[1:2]
+    B0 <- as.numeric(Ymeans - crossprod(Xmeans, B))
+
+    it <- newdata %>%
+      BPCells::convert_matrix_type("double") %>%
+      iterate_matrix()
+    pred <- predict_pls_cpp(it, B, B0, is_transposed)
+
+    rownames(pred) <- sample.names
+    colnames(pred) <- names(Ymeans)
+  } else {
+    pred <- array(NA_real_, dim = c(n.samples, q, length(ncomp)))
+    for (i in seq_along(ncomp)) {
+      k <- ncomp[i]
+      B <- coefficients[, , k, drop = FALSE]
+      dim(B) <- dim(B)[1:2]
+      B0 <- as.numeric(Ymeans - crossprod(Xmeans, B))
+
+      # Fresh iterator each time (take_unique_xptr consumes the previous one)
+      it <- newdata %>%
+        BPCells::convert_matrix_type("double") %>%
+        iterate_matrix()
+      pred[, , i] <- predict_pls_cpp(it, B, B0, is_transposed)
+    }
+    comp.names <- dimnames(coefficients)[[3]]
+    if (!is.null(comp.names)) {
+      comp.labels <- comp.names[ncomp]
+    } else {
+      comp.labels <- paste(ncomp, "comps")
+    }
+    dimnames(pred) <- list(
+      sample.names,
+      names(Ymeans),
+      comp.labels
+    )
+  }
+
+  return(pred)
 }

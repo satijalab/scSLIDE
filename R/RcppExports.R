@@ -9,3 +9,7 @@ kernelpls_cpp <- function(matrix_X, Y, ncomp, center, stripped, transpose) {
     .Call(`_scSLIDE_kernelpls_cpp`, matrix_X, Y, ncomp, center, stripped, transpose)
 }
 
+predict_pls_cpp <- function(matrix_X, B, B0, transpose) {
+    .Call(`_scSLIDE_predict_pls_cpp`, matrix_X, B, B0, transpose)
+}
+
