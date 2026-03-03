@@ -49,9 +49,16 @@ Default is NULL.}
 
 \item{new.assay.name}{the name for the new assay to store the corrected expression matrix}
 
-\item{max_core}{the number of cores to use for parallel processing. Default is 1 (sequential).}
+\item{max_core}{the number of cores to use for parallel processing when parallel backends are available.
+For dense in-memory processing on supported platforms, values \code{> 1} enable parallel execution.
+When the input layer is an on-disk BPCells \code{IterableMatrix}, processing is currently sequential
+regardless of \code{max_core}. On Windows, dense-mode parallelization uses a multisession (multi-process)
+backend, which may incur higher memory usage because global data must be exported to each worker.
+Default is \code{1} (sequential).}
 
-\item{future.memory.per.core}{the maximum memory (in MB) allowed per core for parallel processing. Default is 2000.}
+\item{future.memory.per.core}{the maximum memory (in MB) allowed per core for parallel processing when a
+parallel backend is in use (e.g., dense in-memory mode). This setting may be ignored when computation
+is effectively sequential (such as on-disk BPCells processing or when \code{max_core = 1}). Default is \code{2000}.}
 
 \item{verbose}{display progress + messages}
 }
