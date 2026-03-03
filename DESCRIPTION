@@ -31,6 +31,7 @@ Imports:
     RSpectra,
     irlba,
     future,
+    future.apply,
     Rcpp
 LinkingTo:
     Rcpp,

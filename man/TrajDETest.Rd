@@ -65,7 +65,7 @@ TrajDETest(object, ...)
   min.pct = 0.1,
   min.count = 10,
   pseudocount.use = 1,
-  complete.resutls = FALSE,
+  complete.results = FALSE,
   verbose = TRUE,
   ...
 )
@@ -103,7 +103,7 @@ along the trajectory and to calculate the logfc.}
 
 \item{assay}{the assay to be used (for Seurat objects)}
 
-\item{complete.resutls}{Whether to return complete results or summary}
+\item{complete.results}{Whether to return complete results or summary}
 }
 \value{
 A data frame with differential expression results
