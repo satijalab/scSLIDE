@@ -168,7 +168,8 @@ PredictPLS.Seurat <- function(
   assay <- assay %||% DefaultAssay(newdata)
 
   # Extract data matrix for matching features
-  available.features <- rownames(LayerData(newdata[[assay]], layer = layer))
+  layer.data <- LayerData(newdata[[assay]], layer = layer)
+  available.features <- rownames(layer.data)
   missing.features <- setdiff(features, available.features)
   if (length(missing.features) > 0) {
     stop("newdata is missing ", length(missing.features),
@@ -176,8 +177,6 @@ PredictPLS.Seurat <- function(
          paste(head(missing.features, 5), collapse = ", "),
          if (length(missing.features) > 5) ", ..." else "")
   }
-
-  layer.data <- LayerData(newdata[[assay]], layer = layer)
 
   if (inherits(layer.data, "IterableMatrix")) {
     # Subset features lazily (features x samples layout), pass through
