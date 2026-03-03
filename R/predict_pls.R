@@ -22,10 +22,20 @@
 #' @return A matrix (n x q) if a single \code{ncomp} value, or a 3D array
 #'   (n x q x length(ncomp)) if multiple values are given.
 #'
+#' @details
+#' When called on a Seurat object, \code{PredictPLS} automatically scales the
+#' new data using per-gene mean and standard deviation stored from the training
+#' \code{data} layer (saved by \code{RunPLS(..., save.model = TRUE)}). This
+#' ensures that new observations are projected into the same coordinate system
+#' used to fit the PLS model. If the model was saved without scaling parameters
+#' (e.g., from an older version), a warning is emitted and prediction proceeds
+#' without scaling.
+#'
 #' @export
 #' @rdname PredictPLS
 #'
 #' @importFrom SeuratObject Loadings DefaultAssay LayerData
+#' @importFrom utils head
 #'
 #' @examples
 #' \dontrun{
@@ -178,9 +188,23 @@ PredictPLS.Seurat <- function(
          if (length(missing.features) > 5) ", ..." else "")
   }
 
+  # Apply training scaling parameters if available
+  feat.mean <- reduction.obj@misc$model$feature.mean
+  feat.sd <- reduction.obj@misc$model$feature.sd
+  has.scaling <- !is.null(feat.mean) && !is.null(feat.sd)
+  if (!has.scaling) {
+    warning("PLS model does not contain feature.mean/feature.sd scaling ",
+            "parameters. Prediction will proceed without scaling. ",
+            "Re-run RunPLS() with save.model = TRUE to store scaling parameters.")
+  }
+
   if (inherits(layer.data, "IterableMatrix")) {
     # Subset features lazily (features x samples layout), pass through
     new.mat <- layer.data[features, ]
+    # Apply row-wise centering and scaling via BPCells lazy arithmetic
+    if (has.scaling) {
+      new.mat <- (new.mat - feat.mean[features]) / feat.sd[features]
+    }
     return(PredictPLS.DimReduc(
       object = reduction.obj,
       newdata = new.mat,
@@ -191,6 +215,11 @@ PredictPLS.Seurat <- function(
 
   # Dense path: materialise and transpose to cells x features
   new.mat <- t(as.matrix(layer.data[features, ]))
+  if (has.scaling) {
+    new.mat <- scale(new.mat, center = feat.mean[features], scale = feat.sd[features])
+    attr(new.mat, "scaled:center") <- NULL
+    attr(new.mat, "scaled:scale") <- NULL
+  }
 
   # Delegate to DimReduc method
   PredictPLS.DimReduc(

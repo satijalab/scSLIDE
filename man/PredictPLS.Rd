@@ -51,6 +51,15 @@ Performs response prediction on new data using a PLS model previously
 fitted with \code{\link{RunPLS}(..., save.model = TRUE)}. Mirrors the
 core behaviour of \code{predict.mvr()} from the \pkg{pls} package.
 }
+\details{
+When called on a Seurat object, \code{PredictPLS} automatically scales the
+new data using per-gene mean and standard deviation stored from the training
+\code{data} layer (saved by \code{RunPLS(..., save.model = TRUE)}). This
+ensures that new observations are projected into the same coordinate system
+used to fit the PLS model. If the model was saved without scaling parameters
+(e.g., from an older version), a warning is emitted and prediction proceeds
+without scaling.
+}
 \examples{
 \dontrun{
 # Fit PLS model with save.model = TRUE

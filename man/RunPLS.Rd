@@ -137,7 +137,7 @@ the number for the dimension names.}
 
 \item{eta}{Thresholding parameter that controls the sparsity of the spls method (larger --> sparser). eta should be between 0 and 1.}
 
-\item{save.model}{Logical; if TRUE, save model components (coefficients, Xmeans, Ymeans) into the misc slot for later prediction. Default FALSE.}
+\item{save.model}{Logical; if TRUE, save model components (coefficients, Xmeans, Ymeans, feature.mean, feature.sd) into the misc slot for later prediction. The per-gene \code{feature.mean} and \code{feature.sd} are computed from the training \code{data} layer so that \code{PredictPLS} can scale new data into the same coordinate system. Default FALSE.}
 
 \item{features}{Features to compute PLS on}
 
