@@ -20,6 +20,7 @@
 #' @param seed.use Set a random seed.  Setting NULL will not set a seed.
 #' @param eta Thresholding parameter that controls the sparsity of the spls method (larger --> sparser). eta should be between 0 and 1.
 #' @param features Features to compute PLS on
+#' @param save.model Logical; if TRUE, save model components (coefficients, Xmeans, Ymeans, feature.mean, feature.sd) into the misc slot for later prediction. The per-gene \code{feature.mean} and \code{feature.sd} are computed from the training \code{data} layer so that \code{PredictPLS} can scale new data into the same coordinate system. Default FALSE.
 #' @param layer The layer in `assay` to use when running PLS analysis.
 #' @param ... Additional arguments to be passed to the PLS function
 #'
@@ -35,7 +36,7 @@
 #'
 #' @import pls
 #' @importFrom spls spls
-#' @importFrom stats model.matrix
+#' @importFrom stats model.matrix sd
 #' @importFrom SeuratObject CreateDimReducObject DefaultAssay Assays Cells
 #' @importFrom Seurat LogSeuratCommand
 #' @importFrom utils getFromNamespace
@@ -62,6 +63,7 @@ RunPLS.default <- function(
     reduction.key = "PLS_",
     seed.use = 42,
     eta = 0.5,
+    save.model = FALSE,
     ...
 ) {
   # Get internal function from Seurat
@@ -97,6 +99,9 @@ RunPLS.default <- function(
     colnames(cell.embeddings) <- paste0(reduction.key, 1:ncol(cell.embeddings))
     stdev <- numeric()
     misc <- list()
+    if (save.model) {
+      warning("save.model is not supported for spls; model components will not be saved.")
+    }
   } else {
     feature.loadings <- unclass(pls.results$projection)
     colnames(feature.loadings) <- paste0(reduction.key, 1:ncol(feature.loadings))
@@ -112,6 +117,13 @@ RunPLS.default <- function(
     R2 <- matrix(pls::R2(pls.results)$val, byrow = T, ncol = dim(pls::R2(pls.results)$val)[2])
     mean_final_R2 <- mean(R2[nrow(R2), ])
     message("The average R2 of the PLS model is ", mean_final_R2)
+    if (save.model) {
+      misc$model <- list(
+        coefficients = pls.results$coefficients,
+        Xmeans = pls.results$Xmeans,
+        Ymeans = pls.results$Ymeans
+      )
+    }
   }
   #
   reduction.data <- CreateDimReducObject(
@@ -145,6 +157,7 @@ RunPLS.IterableMatrix <- function(
     reduction.key = "PLS_",
     seed.use = 42,
     eta = 0.5,
+    save.model = FALSE,
     ...
 ) {
   pls.function <- match.arg(arg = pls.function)
@@ -191,6 +204,13 @@ RunPLS.IterableMatrix <- function(
 
   stdev <- pls.results$Xvar
   misc <- list()
+  if (save.model) {
+    misc$model <- list(
+      coefficients = pls.results$coefficients,
+      Xmeans = pls.results$Xmeans,
+      Ymeans = pls.results$Ymeans
+    )
+  }
 
   reduction.data <- CreateDimReducObject(
     embeddings = cell.embeddings,
@@ -224,6 +244,7 @@ RunPLS.Assay <- function(
     reduction.key = "PLS_",
     seed.use = 42,
     eta = 0.5,
+    save.model = FALSE,
     ...
 ) {
   # Get internal function from Seurat
@@ -247,6 +268,7 @@ RunPLS.Assay <- function(
     reduction.key = reduction.key,
     seed.use = seed.use,
     eta = eta,
+    save.model = save.model,
     ...
 
   )
@@ -272,6 +294,7 @@ RunPLS.StdAssay <- function(
     reduction.key = "PLS_",
     seed.use = 42,
     eta = 0.5,
+    save.model = FALSE,
     ...
 ) {
   # Get internal function from Seurat
@@ -296,6 +319,7 @@ RunPLS.StdAssay <- function(
     reduction.key = reduction.key,
     seed.use = seed.use,
     eta = eta,
+    save.model = save.model,
     ...
 
   )
@@ -320,6 +344,7 @@ RunPLS.Seurat <- function(
     reduction.key = "PLS_",
     seed.use = 42,
     eta = 0.5,
+    save.model = FALSE,
     ...
 ) {
   assay <- assay %||% DefaultAssay(object = object)
@@ -344,8 +369,37 @@ RunPLS.Seurat <- function(
     reduction.key = reduction.key,
     seed.use = seed.use,
     eta = eta,
+    save.model = save.model,
     ...
   )
+
+  # Store per-gene scaling parameters from the training data layer so that
+  # PredictPLS.Seurat can transform new (unscaled) data into training-scaled
+  # space before applying PLS coefficients.
+  if (save.model && !is.null(reduction.data@misc$model)) {
+    pls.features <- rownames(Loadings(reduction.data))
+    train.data <- LayerData(object[[assay]], layer = "data")
+    train.data <- train.data[pls.features, , drop = FALSE]
+
+    if (inherits(train.data, "IterableMatrix")) {
+      stats <- BPCells::matrix_stats(train.data, row_stats = "variance")
+      feat.mean <- stats$row_stats["mean", ]
+      feat.sd <- sqrt(stats$row_stats["variance", ])
+    } else {
+      feat.mean <- rowMeans(train.data)
+      feat.sd <- apply(train.data, 1, sd)
+    }
+
+    # Edge cases: NA means -> 0, zero/NA SDs -> 1
+    feat.mean[is.na(feat.mean)] <- 0
+    feat.sd[is.na(feat.sd) | feat.sd == 0] <- 1
+
+    names(feat.mean) <- pls.features
+    names(feat.sd) <- pls.features
+    reduction.data@misc$model$feature.mean <- feat.mean
+    reduction.data@misc$model$feature.sd <- feat.sd
+  }
+
   object[[reduction.name]] <- reduction.data
   object <- LogSeuratCommand(object = object)
   return(object)

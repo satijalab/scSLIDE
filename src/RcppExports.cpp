@@ -46,10 +46,25 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// predict_pls_cpp
+Eigen::MatrixXd predict_pls_cpp(SEXP matrix_X, Eigen::Map<Eigen::MatrixXd> B, Eigen::Map<Eigen::VectorXd> B0, bool transpose);
+RcppExport SEXP _scSLIDE_predict_pls_cpp(SEXP matrix_XSEXP, SEXP BSEXP, SEXP B0SEXP, SEXP transposeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type matrix_X(matrix_XSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::MatrixXd> >::type B(BSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type B0(B0SEXP);
+    Rcpp::traits::input_parameter< bool >::type transpose(transposeSEXP);
+    rcpp_result_gen = Rcpp::wrap(predict_pls_cpp(matrix_X, B, B0, transpose));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_scSLIDE_cppls_cpp", (DL_FUNC) &_scSLIDE_cppls_cpp, 9},
     {"_scSLIDE_kernelpls_cpp", (DL_FUNC) &_scSLIDE_kernelpls_cpp, 6},
+    {"_scSLIDE_predict_pls_cpp", (DL_FUNC) &_scSLIDE_predict_pls_cpp, 4},
     {NULL, NULL, 0}
 };
 
