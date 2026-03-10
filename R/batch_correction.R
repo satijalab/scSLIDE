@@ -211,7 +211,7 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
       LL_tmp <- LL[cells, , drop = FALSE]
       qr_LL <- qr(LL_tmp)
       # Materialise only this batch's subset from on-disk directly in transposed form
-      tGEX_mat <- as.matrix(base::t(GEX_full[, cells, drop = FALSE]))
+      tGEX_mat <- as.matrix(t(GEX_full[, cells, drop = FALSE]))
       base::t(qr.coef(qr_LL, tGEX_mat))
     })
   } else {
