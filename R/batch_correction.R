@@ -373,6 +373,16 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
     row_params <- base::t(VV1T)   # (k x genes)
     col_params <- correction_coef  # (k x cells)
 
+    # BPCells' TransformLinearResidual applies row_params/col_params in the
+    # internal (pre-transpose) coordinate system.  When the matrix is stored
+    # transposed (storage_order == "row"), we must swap the params — exactly
+    # as BPCells' own regress_out() does (see BPCells/R/transforms.R).
+    if (GEX_full@transpose) {
+      tmp <- row_params
+      row_params <- col_params
+      col_params <- tmp
+    }
+
     if(isTRUE(verbose)) {
       message("Creating corrected assay (lazy on-disk transform)...")
     }
