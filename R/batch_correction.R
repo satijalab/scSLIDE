@@ -45,6 +45,7 @@
 #' @importFrom SeuratObject LayerData Embeddings CreateAssay5Object
 #' @importFrom future.apply future_lapply
 #' @importFrom methods slot slot<- new
+#' @importMethodsFrom BPCells t %*%
 #'
 
 cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data", integrate_key = NULL,
