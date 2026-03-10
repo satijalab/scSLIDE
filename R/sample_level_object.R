@@ -259,8 +259,8 @@ PrepareSampleObject <- function(
                     weighted.nn.name = weighted.nn.name,
                     dims.list = dims.list,
                     fix.wnn.weights = fix.wnn.weights,
-                    verbose = verbose,
-                    ...)
+                    verbose = verbose
+                   )
   # return the object
   return(object)
 }
