@@ -166,8 +166,8 @@ RunPLS.IterableMatrix <- function(
     set.seed(seed = seed.use)
   }
 
-  n.samples <- if (object@transpose) nrow(object) else ncol(object)
-  n.features <- if (object@transpose) ncol(object) else nrow(object)
+  n.samples <- ncol(object)
+  n.features <- nrow(object)
   max.ncomp <- min(n.samples, n.features) - 1L
   if (max.ncomp < 1L) {
     rlang::abort("IterableMatrix must have at least 2 samples/features to run PLS.")
@@ -190,14 +190,14 @@ RunPLS.IterableMatrix <- function(
 
   feature.loadings <- unclass(pls.results$projection)
   colnames(feature.loadings) <- paste0(reduction.key, seq_len(ncol(feature.loadings)))
-  feature.names <- if (object@transpose) colnames(object) else rownames(object)
+  feature.names <- rownames(object)
   if (!is.null(feature.names) && length(feature.names) == nrow(feature.loadings)) {
     rownames(feature.loadings) <- feature.names
   }
 
   cell.embeddings <- unclass(pls.results$scores)
   colnames(cell.embeddings) <- paste0(reduction.key, seq_len(ncol(cell.embeddings)))
-  sample.names <- if (object@transpose) rownames(object) else colnames(object)
+  sample.names <- colnames(object)
   if (!is.null(sample.names) && length(sample.names) == nrow(cell.embeddings)) {
     rownames(cell.embeddings) <- sample.names
   }
@@ -487,13 +487,10 @@ kernelpls.IterableMatrix <- function(X, Y, ncomp, center = TRUE,
     rlang::abort("Y must be numeric (or a factor/character vector for classification)")
   }
 
-  # BPCells matrices are features x samples (p x n).
-  # The C++ code handles the transpose internally via the transpose flag.
-  # Determine n (samples) and p (features) from the stored layout:
-  #   If X@transpose is FALSE (default), stored as p x n -> n = ncol(X), p = nrow(X)
-  #   If X@transpose is TRUE, stored as n x p -> n = nrow(X), p = ncol(X)
-  n <- if (X@transpose) nrow(X) else ncol(X)
-  p <- if (X@transpose) ncol(X) else nrow(X)
+  # BPCells' nrow()/ncol() already account for @transpose, so they always
+  # return the user-facing dimensions: nrow = features, ncol = samples.
+  n <- ncol(X)
+  p <- nrow(X)
   q <- ncol(Y)
 
   if (n != nrow(Y)) {
@@ -639,9 +636,10 @@ cppls_ondisk.IterableMatrix <- function(X, Y, Y.add = NULL, ncomp,
     }
   }
 
-  # BPCells matrices are features x samples (p x n).
-  n <- if (X@transpose) nrow(X) else ncol(X)
-  p <- if (X@transpose) ncol(X) else nrow(X)
+  # BPCells' nrow()/ncol() already account for @transpose, so they always
+  # return the user-facing dimensions: nrow = features, ncol = samples.
+  n <- ncol(X)
+  p <- nrow(X)
   q <- ncol(Y)
 
   if (n != nrow(Y)) {
