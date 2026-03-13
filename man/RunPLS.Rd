@@ -114,10 +114,21 @@ RunPLS(object, ...)
 
 \item{ncomp}{Number of components to compute}
 
-\item{Y}{a vector or matrix of responses, i.e., the dependent variable that PLS regresses X on. The length / number of rows should be the same as the number of cells.
-Y can have multiple columns.}
+\item{Y}{The response variable(s) for PLS regression.
+Accepted formats:
+\itemize{
+\item A character vector of column names in the Seurat object metadata
+(Seurat method only).
+\item A \code{data.frame}, which is converted via
+\code{model.matrix(~. + 0, data = Y)}.
+\item A numeric matrix (used as-is).
+\item A numeric vector (promoted to a single-column matrix).
+}
+The number of rows must match the number of cells/samples.}
 
-\item{Y.add}{a vector or matrix of additional responses containing relevant information about the observations. Only used for cppls.}
+\item{Y.add}{Additional response variable(s) containing relevant
+information about the observations. Only used for cppls. Accepts the same
+formats as \code{Y}.}
 
 \item{pls.function}{PLS function from pls package to run (options: plsr, spls, cppls)}
 
@@ -152,8 +163,12 @@ This function provides methods for plsr, spls, and cppls from the pls and spls p
 }
 \examples{
 \dontrun{
-# Run PLS on a Seurat object
+# Run PLS on a Seurat object using metadata column names
 seurat_obj <- RunPLS(seurat_obj, Y = "condition", ncomp = 10)
+
+# Run PLS with a pre-built numeric design matrix
+design_mat <- model.matrix(~ age + sex, data = seurat_obj[[]])
+seurat_obj <- RunPLS(seurat_obj, Y = design_mat, ncomp = 10)
 }
 
 }
