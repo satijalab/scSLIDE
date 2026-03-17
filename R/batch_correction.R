@@ -1,3 +1,123 @@
+#' Batch-specific Mean Correction
+#'
+#' Performs a simple batch-specific mean correction on a sample-level Seurat object.
+#' For each batch, the mean vector of the control samples in that batch is computed
+#' and subtracted from all samples (including controls) belonging to that batch.
+#'
+#' When a batch contains no control samples, the function falls back to the global
+#' control mean (across all batches) and emits a warning.
+#'
+#' @param object A Seurat object (sample-level)
+#' @param assay Name of the assay to correct. Default is `DefaultAssay(object)`.
+#' @param layer Layer within the assay that contains the data to correct. Default is `"data"`.
+#' @param batch_key Column name in `object@meta.data` identifying the batch (e.g., plate, pool).
+#' @param condition_key Column name in `object@meta.data` identifying the experimental condition.
+#' @param control_label Value(s) in the `condition_key` column that mark control samples.
+#' @param verbose Print progress messages. Default `TRUE`.
+#'
+#' @return The Seurat object with the corrected data written back to the specified assay layer.
+#' @export
+#' @concept batch_correction
+#'
+#' @examples
+#' \dontrun{
+#' obj <- CorrectBatchMean(obj, assay = "LMC",
+#'                         batch_key = "plate",
+#'                         condition_key = "Condition",
+#'                         control_label = "ctrl-inj")
+#' }
+#'
+#' @importFrom SeuratObject LayerData LayerData<- DefaultAssay Cells
+#'
+CorrectBatchMean <- function(object,
+                             assay = NULL,
+                             layer = "data",
+                             batch_key = NULL,
+                             condition_key = NULL,
+                             control_label = NULL,
+                             verbose = TRUE) {
+
+  # --- input validation ---
+  if (!inherits(object, "Seurat")) {
+    stop("'object' must be a Seurat object")
+  }
+
+  assay <- assay %||% DefaultAssay(object = object)
+  if (!assay %in% names(object@assays)) {
+    stop("Assay '", assay, "' not found in object")
+  }
+
+  if (is.null(batch_key)) {
+    stop("Please specify 'batch_key': the metadata column identifying batches")
+  }
+  if (!batch_key %in% colnames(object@meta.data)) {
+    stop("Column '", batch_key, "' not found in object metadata")
+  }
+
+  if (is.null(condition_key)) {
+    stop("Please specify 'condition_key': the metadata column identifying conditions")
+  }
+  if (!condition_key %in% colnames(object@meta.data)) {
+    stop("Column '", condition_key, "' not found in object metadata")
+  }
+
+  if (is.null(control_label)) {
+    stop("Please specify 'control_label': the value(s) marking control samples in '", condition_key, "'")
+  }
+
+  # --- retrieve the data matrix ---
+  data_mat <- LayerData(object = object[[assay]], layer = layer)
+
+  all_cells <- Cells(object[[assay]])
+  conditions <- object@meta.data[all_cells, condition_key]
+  batches    <- object@meta.data[all_cells, batch_key]
+  is_control <- conditions %in% control_label
+
+  # pre-compute global control mean as fallback
+  global_ctrl_idx <- all_cells[is_control]
+  if (length(global_ctrl_idx) == 0) {
+    stop("No control samples found with '", condition_key, "' in ",
+         paste(control_label, collapse = ", "))
+  }
+  if (length(global_ctrl_idx) >= 2) {
+    global_mean_vec <- rowMeans(data_mat[, global_ctrl_idx])
+  } else {
+    global_mean_vec <- data_mat[, global_ctrl_idx]
+  }
+
+  # --- batch-specific mean correction ---
+  unique_batches <- unique(batches)
+
+  for (b in unique_batches) {
+    batch_ctrl_idx <- all_cells[batches == b & is_control]
+
+    if (length(batch_ctrl_idx) >= 2) {
+      mean_vec <- rowMeans(data_mat[, batch_ctrl_idx])
+    } else if (length(batch_ctrl_idx) == 1) {
+      mean_vec <- data_mat[, batch_ctrl_idx]
+    } else {
+      warning("Batch '", b, "' has no control samples; using global control mean as fallback")
+      mean_vec <- global_mean_vec
+    }
+
+    batch_all_idx <- all_cells[batches == b]
+    data_mat[, batch_all_idx] <- sweep(data_mat[, batch_all_idx], 1, mean_vec)
+
+    if (isTRUE(verbose)) {
+      message("Done with batch: ", b)
+    }
+  }
+
+  # --- write corrected data back ---
+  LayerData(object[[assay]], layer = layer) <- data_mat
+  if (isTRUE(verbose)) {
+    message("Batch mean correction completed for assay '", assay, "'")
+  }
+
+  return(object)
+}
+
+
 #' Perform CellAnova Batch correction
 #'
 #' CellAnova (Zhaojun Zhang et al, 2024 Nat Biotech) is a new method that can remove/mitigate batch effect in single-cell data
@@ -46,8 +166,7 @@
 #' @importFrom future.apply future_lapply
 #' @importFrom methods slot slot<- new
 #' @importMethodsFrom BPCells t %*%
-#'
-
+#' @noRd
 cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data", integrate_key = NULL,
                               features = NULL, control_dict = NULL, reduction = NULL, var_cutoff = 0.9, k_max = 1500, k_select = NULL,
                               new.assay.name = "CORRECTED", max_core = 1, future.memory.per.core = 2000,
@@ -121,7 +240,7 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
     control_dict <- list(g1 = control_dict)
   }
   control_groups <- names(control_dict)
-  
+
   # Validate control samples exist in the data
   all_batches <- unique(object@meta.data[[integrate_key]])
   missing_batches <- setdiff(unlist(control_dict), all_batches)
@@ -441,9 +560,3 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
 
   return(object)
 }
-
-
-
-
-
-
