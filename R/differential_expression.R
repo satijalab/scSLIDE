@@ -20,9 +20,16 @@
 #' @param min.count Minimum count threshold for gene filtering
 #' @param pseudocount.use Pseudocount to add to averaged expression values when calculating logFC. 1 by default.
 #' @param complete.results Whether to return complete results or summary
+#' @param n.perm Number of permutations for permutation testing (default 0, no permutation test).
+#'   When > 0, the trajectory variable is shuffled \code{n.perm} times and a null distribution
+#'   of beta coefficients is built. Empirical p-values (\code{perm_p_Traj}) and permutation-based
+#'   standard errors (\code{perm_se_Traj}) are appended to the results.
+#' @param seed.use Random seed for reproducibility of permutation indices. Set to \code{NULL} to disable.
 #' @param ... additional parameters to be passed to glmGamPoi::glm_gp or filterByExpr
 #'
-#' @return A data frame with differential expression results
+#' @return A data frame with differential expression results. When \code{n.perm > 0},
+#'   two additional columns are included: \code{perm_p_Traj} (two-sided permutation p-value)
+#'   and \code{perm_se_Traj} (SD of permuted beta coefficients).
 #' @export
 #' @concept scSLIDE_DE
 #'
@@ -51,6 +58,8 @@ TrajDETest.default <- function(
     latent.vars = NULL,
     features = NULL,
     fc.results = NULL,
+    n.perm = 0,
+    seed.use = 42,
     verbose = TRUE,
     ...
 ){
@@ -87,6 +96,41 @@ TrajDETest.default <- function(
   p$gene_ID = p$name
   res = cbind(beta, p)
 
+  # permutation test
+  if (n.perm > 0) {
+    n.perm <- as.integer(n.perm)
+    if (n.perm < 100) warning("n.perm < 100; consider more permutations.")
+
+    observed_beta <- fit$Beta[, "Traj"]
+    n_samples <- nrow(full_model_mat)
+    traj_col_idx <- which(colnames(full_model_mat) == "Traj")
+
+    # Set seed & pre-generate all permutation indices
+    if (!is.null(seed.use)) set.seed(seed.use)
+    perm_indices <- replicate(n.perm, sample.int(n_samples))
+
+    # Run permutations (parallelized via user's future::plan)
+    perm_betas <- future.apply::future_lapply(seq_len(n.perm), function(i) {
+      perm_design <- full_model_mat
+      perm_design[, traj_col_idx] <- full_model_mat[perm_indices[, i], traj_col_idx]
+      perm_fit <- glmGamPoi::glm_gp(
+        data = object[features, ], design = perm_design,
+        size_factors = FALSE, on_disk = FALSE, verbose = FALSE
+      )
+      perm_fit$Beta[, "Traj"]
+    }, future.seed = TRUE)
+
+    # Assemble null distribution matrix (genes x permutations)
+    perm_beta_mat <- do.call(cbind, perm_betas)
+
+    # Empirical two-sided p-value: (count + 1) / (n.perm + 1)
+    n_exceed <- rowSums(abs(perm_beta_mat) >= abs(observed_beta))
+    res$perm_p_Traj <- (n_exceed + 1) / (n.perm + 1)
+
+    # Permutation-based SE (SD of null betas)
+    res$perm_se_Traj <- apply(perm_beta_mat, 1, sd)
+  }
+
   # append the fc.results
   if(!is.null(x = fc.results)){
     fc.results <- fc.results[features, ]
@@ -111,6 +155,8 @@ TrajDETest.Assay <- function(
     min.pct = 0.1,
     min.count = 10,
     pseudocount.use = 1,
+    n.perm = 0,
+    seed.use = 42,
     verbose = TRUE,
     ...
 ){
@@ -154,6 +200,8 @@ TrajDETest.Assay <- function(
     latent.vars = latent.vars,
     features = idx_for_DE,
     fc.results = fc.results,
+    n.perm = n.perm,
+    seed.use = seed.use,
     verbose = verbose,
     ...
   )
@@ -182,6 +230,8 @@ TrajDETest.Seurat <- function(
     min.pct = 0.1,
     min.count = 10,
     pseudocount.use = 1,
+    n.perm = 0,
+    seed.use = 42,
     complete.results = FALSE,
     verbose = TRUE,
     ...
@@ -231,15 +281,25 @@ TrajDETest.Seurat <- function(
     min.pct = min.pct,
     min.count = min.count,
     pseudocount.use = pseudocount.use,
+    n.perm = n.perm,
+    seed.use = seed.use,
     verbose = verbose,
     ...
   )
   #
-  de.results <- de.results[order(de.results$p_Traj), ]
+  if (n.perm > 0) {
+    de.results <- de.results[order(de.results$perm_p_Traj), ]
+  } else {
+    de.results <- de.results[order(de.results$p_Traj), ]
+  }
   if(isTRUE(x = complete.results)){
     return(de.results)
   } else {
-    return(de.results[, c("gene_ID", "beta_Traj", "p_Traj", "adj_pval", "avg_log2FC", "pct.1", "pct.2")])
+    summary_cols <- c("gene_ID", "beta_Traj", "p_Traj", "adj_pval", "avg_log2FC", "pct.1", "pct.2")
+    if ("perm_p_Traj" %in% colnames(de.results)) {
+      summary_cols <- c(summary_cols, "perm_p_Traj", "perm_se_Traj")
+    }
+    return(de.results[, summary_cols])
   }
 }
 

@@ -16,6 +16,8 @@ TrajDETest(object, ...)
   latent.vars = NULL,
   features = NULL,
   fc.results = NULL,
+  n.perm = 0,
+  seed.use = 42,
   verbose = TRUE,
   ...
 )
@@ -32,6 +34,8 @@ TrajDETest(object, ...)
   min.pct = 0.1,
   min.count = 10,
   pseudocount.use = 1,
+  n.perm = 0,
+  seed.use = 42,
   verbose = TRUE,
   ...
 )
@@ -48,6 +52,8 @@ TrajDETest(object, ...)
   min.pct = 0.1,
   min.count = 10,
   pseudocount.use = 1,
+  n.perm = 0,
+  seed.use = 42,
   verbose = TRUE,
   ...
 )
@@ -65,6 +71,8 @@ TrajDETest(object, ...)
   min.pct = 0.1,
   min.count = 10,
   pseudocount.use = 1,
+  n.perm = 0,
+  seed.use = 42,
   complete.results = FALSE,
   verbose = TRUE,
   ...
@@ -82,6 +90,13 @@ TrajDETest(object, ...)
 \item{features}{Genes to test. Default is to use all genes (after QC)}
 
 \item{fc.results}{fc.results calculated by FoldChange(); if not null QC will be performed based on this}
+
+\item{n.perm}{Number of permutations for permutation testing (default 0, no permutation test).
+When > 0, the trajectory variable is shuffled \code{n.perm} times and a null distribution
+of beta coefficients is built. Empirical p-values (\code{perm_p_Traj}) and permutation-based
+standard errors (\code{perm_se_Traj}) are appended to the results.}
+
+\item{seed.use}{Random seed for reproducibility of permutation indices. Set to \code{NULL} to disable.}
 
 \item{verbose}{Print a progress bar once expression testing begins}
 
@@ -106,7 +121,9 @@ along the trajectory and to calculate the logfc.}
 \item{complete.results}{Whether to return complete results or summary}
 }
 \value{
-A data frame with differential expression results
+A data frame with differential expression results. When \code{n.perm > 0},
+two additional columns are included: \code{perm_p_Traj} (two-sided permutation p-value)
+and \code{perm_se_Traj} (SD of permuted beta coefficients).
 }
 \description{
 Perform trajectory-based differential expression analysis using negative binomial regression.
