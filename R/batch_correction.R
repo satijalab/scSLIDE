@@ -392,21 +392,17 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
   total_var <- sum(res_combined^2)
 
   if(is.null(x = k_select)){
-    k_max <- min(c(k_max, dim(res_combined) - 1))
+    k_max <- min(c(k_max, min(dim(res_combined)) - 1))
 
     # Two-stage SVD: run a small pilot first to estimate k
     k_pilot <- min(k_max, 100)
+    k_pilot <- min(k_pilot, min(dim(res_combined)) - 1)
 
     if(isTRUE(verbose)) {
       message("Performing pilot SVD with k_pilot = ", k_pilot)
     }
 
-    if (k_pilot >= min(dim(res_combined)) - 1) {
-      tmp <- base::svd(res_combined, nu = 0, nv = k_pilot)
-      pilot_svds <- list(d = tmp$d, v = tmp$v)
-    } else {
-      pilot_svds <- RSpectra::svds(res_combined, k = k_pilot)
-    }
+    pilot_svds <- RSpectra::svds(res_combined, k = k_pilot)
     DD1 <- pilot_svds$d
 
     # Calculate cumulative variance explained from pilot
@@ -420,15 +416,11 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
 
     if (is.na(k) || k > k_pilot) {
       # Pilot was not enough — fall back to full k_max SVD
+      k_max <- min(k_max, min(dim(res_combined)) - 1)
       if(isTRUE(verbose)) {
         message("Pilot SVD insufficient, performing full SVD with k_max = ", k_max)
       }
-      if (k_max >= min(dim(res_combined)) - 1) {
-        tmp <- base::svd(res_combined, nu = 0, nv = k_max)
-        final_svds <- list(d = tmp$d, v = tmp$v)
-      } else {
-        final_svds <- RSpectra::svds(res_combined, k = k_max)
-      }
+      final_svds <- RSpectra::svds(res_combined, k = k_max)
       DD1 <- final_svds$d
       positive_sv <- DD1[DD1 > 0]
       variance <- cumsum(positive_sv^2) / total_var
@@ -451,12 +443,7 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
       warning("k_select too large, reduced to ", k)
     }
 
-    if (k >= min(dim(res_combined)) - 1) {
-      tmp <- base::svd(res_combined, nu = 0, nv = k)
-      final_svds <- list(d = tmp$d, v = tmp$v)
-    } else {
-      final_svds <- RSpectra::svds(res_combined, k = k)
-    }
+    final_svds <- RSpectra::svds(res_combined, k = k)
 
     if(isTRUE(verbose)) {
       message("Using user-specified k = ", k, " components")
