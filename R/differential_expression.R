@@ -313,7 +313,7 @@ QuickCorTest <- function(
     stop(layer, " layers are not joined. Please run JoinLayers")
   }
   # get cell IDs within each category of the "group.by"
-  if (!is.null(x = group.by) & group.by %in% colnames(object@meta.data)) {
+  if (!is.null(x = group.by) && group.by %in% colnames(object@meta.data)) {
     Idents(object) <- group.by
     cell_celltype_list <- CellsByIdentities(object, cells = Cells(data.use))
   } else {
