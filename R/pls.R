@@ -34,6 +34,57 @@
   Y_mat
 }
 
+# Compute R2 and RMSEP from raw Y and fitted values (no pls model object needed).
+#
+# @param Y n x q response matrix.
+# @param fitted_values n x q x ncomp array of cumulative fitted values.
+# @return A list with \code{$R2} and \code{$RMSEP}, each an \code{mvrVal}-class
+#   object matching the structure of \code{pls::R2()} / \code{pls::RMSEP()}.
+# @keywords internal
+.compute_r2_rmsep <- function(Y, fitted_values) {
+  Y <- as.matrix(Y)
+  n <- nrow(Y)
+  q <- ncol(Y)
+  ncomp <- dim(fitted_values)[3]
+
+  # SST per response (intercept-only model = column means)
+  Y_mean <- matrix(colMeans(Y), nrow = n, ncol = q, byrow = TRUE)
+  SST <- colSums((Y - Y_mean)^2)  # length q
+
+  # R2$val layout from pls: 1 x (ncomp+1) x q
+  # [1,1,] = intercept (0 comps), [1,a+1,] = a comps
+  R2_val <- array(NA_real_, dim = c(1, ncomp + 1, q))
+  RMSEP_val <- array(NA_real_, dim = c(1, ncomp + 1, q))
+
+  # Intercept-only model
+  R2_val[1, 1, ] <- 0
+  RMSEP_val[1, 1, ] <- sqrt(SST / n)
+
+  for (a in seq_len(ncomp)) {
+    fitted_a <- fitted_values[, , a, drop = FALSE]
+    dim(fitted_a) <- c(n, q)
+    SSE <- colSums((Y - fitted_a)^2)
+    R2_val[1, a + 1, ] <- 1 - SSE / SST
+    RMSEP_val[1, a + 1, ] <- sqrt(SSE / n)
+  }
+
+  # Set dimnames matching pls convention
+  comp_names <- c("(Intercept)", paste(seq_len(ncomp), "comps"))
+  resp_names <- colnames(Y)
+  if (is.null(resp_names)) resp_names <- paste0("Y", seq_len(q))
+
+  dimnames(R2_val) <- list("train", comp_names, resp_names)
+  dimnames(RMSEP_val) <- list("train", comp_names, resp_names)
+
+  R2_out <- list(val = R2_val, type = "train")
+  class(R2_out) <- "mvrVal"
+
+  RMSEP_out <- list(val = RMSEP_val, type = "train")
+  class(RMSEP_out) <- "mvrVal"
+
+  list(R2 = R2_out, RMSEP = RMSEP_out)
+}
+
 #' Run Partial Least Squares (PLS) on Seurat Objects
 #'
 #' Performs Partial Least Squares regression analysis on single-cell data.
@@ -254,7 +305,13 @@ RunPLS.IterableMatrix <- function(
   }
 
   stdev <- pls.results$Xvar
-  misc <- list()
+  r2_rmsep <- .compute_r2_rmsep(Y_mat, pls.results$fitted.values)
+  misc <- list(R2 = r2_rmsep$R2,
+               RMSEP = r2_rmsep$RMSEP)
+  # diagnostic message matching RunPLS.default()
+  R2 <- matrix(r2_rmsep$R2$val, byrow = TRUE, ncol = dim(r2_rmsep$R2$val)[2])
+  mean_final_R2 <- mean(R2[nrow(R2), ])
+  message("The average R2 of the PLS model is ", mean_final_R2)
   if (save.model) {
     misc$model <- list(
       coefficients = pls.results$coefficients,

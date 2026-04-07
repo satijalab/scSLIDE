@@ -32,12 +32,12 @@ Imports:
     irlba,
     future,
     future.apply,
-    Rcpp
+    Rcpp,
+    BPCells
 LinkingTo:
     Rcpp,
     RcppEigen
 Suggests:
-    BPCells,
     knn.covertree,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
