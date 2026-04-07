@@ -118,6 +118,378 @@ CorrectBatchMean <- function(object,
 }
 
 
+#' Shrinkage + Regression Batch-Mean Correction
+#'
+#' Performs a shrinkage-based batch-mean correction on a sample-level Seurat
+#' object.
+#'
+#' For every gene the function estimates the between-batch variance
+#' (\eqn{\tau^2}) and within-batch sampling variance (\eqn{\sigma^2}) of the
+#' control means using a one-way random-effects model.
+#' The batch-specific control mean is then shrunk towards the global control
+#' mean:
+#' \deqn{Z^*_{gb} = \lambda_{gb}\,Z_{gb} + (1-\lambda_{gb})\,\bar{Z}_g}
+#' where
+#' \eqn{\lambda_{gb}=\tau^2/(\tau^2 + \sigma^2/n_b)}.
+#'
+#' A per-sample regression of the expression profile on the shrunk batch mean
+#' is used to estimate a sample-specific scaling factor \eqn{\beta_i}, and
+#' the correction applied is
+#' \deqn{x^{\text{corrected}}_{gi} = x_{gi} - \hat\beta_i\,Z^*_{gb_i}.}
+#'
+#' Optionally an attenuation-correction is applied to the OLS estimate of
+#' \eqn{\beta} to account for measurement error in \eqn{Z^*}.
+#'
+#' @param object A Seurat object (sample-level).
+#' @param assay Name of the assay to correct.
+#'   Default is \code{DefaultAssay(object)}.
+#' @param layer Layer within the assay that contains the data to correct.
+#'   Default is \code{"data"}.
+#' @param batch_key Column name in \code{object@@meta.data} identifying the
+#'   batch (e.g., plate, pool).
+#' @param condition_key Column name in \code{object@@meta.data} identifying the
+#'   experimental condition.
+#' @param control_label Value(s) in the \code{condition_key} column that mark
+#'   control samples.
+#' @param shrink.floor Non-negative floor for the \eqn{\tau^2} estimates.
+#'   Default \code{0}.
+#' @param correct.attenuation Logical; if \code{TRUE} the OLS regression slope
+#'   is corrected for attenuation caused by measurement error in the shrunk
+#'   batch means.  Default \code{FALSE} (the shrinkage already reduces most of
+#'   the attenuation).
+#' @param floor.beta Floor applied to per-sample \eqn{\beta} estimates.
+#'   Default \code{0} (prevent negative betas, i.e., never correct in the wrong
+#'   direction).  Set to \code{NULL} to disable.
+#' @param verbose Print progress messages. Default \code{TRUE}.
+#'
+#' @return The Seurat object with the corrected data written back to the
+#'   specified assay layer.
+#'
+#' @export
+#' @concept batch_correction
+#'
+#' @seealso \code{\link{CorrectBatchMean}}
+#'
+#' @examples
+#' \dontrun{
+#' obj <- CorrectBatchMeanShrink(obj, assay = "LMC",
+#'                                batch_key = "plate",
+#'                                condition_key = "Condition",
+#'                                control_label = "ctrl-inj")
+#' }
+#'
+#' @importFrom SeuratObject LayerData LayerData<- DefaultAssay Cells
+#' @importFrom stats median setNames
+#'
+CorrectBatchMeanShrink <- function(object,
+                                   assay = NULL,
+                                   layer = "data",
+                                   batch_key = NULL,
+                                   condition_key = NULL,
+                                   control_label = NULL,
+                                   shrink.floor = 0,
+                                   correct.attenuation = FALSE,
+                                   floor.beta = 0,
+                                   verbose = TRUE) {
+
+  # ---- 1. Input validation + data extraction --------------------------------
+  if (!inherits(object, "Seurat")) {
+    stop("'object' must be a Seurat object")
+  }
+
+  assay <- assay %||% DefaultAssay(object = object)
+  if (!assay %in% names(object@assays)) {
+    stop("Assay '", assay, "' not found in object")
+  }
+
+  if (is.null(batch_key)) {
+    stop("Please specify 'batch_key': the metadata column identifying batches")
+  }
+  if (!batch_key %in% colnames(object@meta.data)) {
+    stop("Column '", batch_key, "' not found in object metadata")
+  }
+
+  if (is.null(condition_key)) {
+    stop("Please specify 'condition_key': the metadata column identifying conditions")
+  }
+  if (!condition_key %in% colnames(object@meta.data)) {
+    stop("Column '", condition_key, "' not found in object metadata")
+  }
+
+  if (is.null(control_label)) {
+    stop("Please specify 'control_label': the value(s) marking control samples in '",
+         condition_key, "'")
+  }
+
+  if (!is.numeric(shrink.floor) || length(shrink.floor) != 1 || shrink.floor < 0) {
+    stop("'shrink.floor' must be a single non-negative number")
+  }
+  if (!is.null(floor.beta) && (!is.numeric(floor.beta) || length(floor.beta) != 1)) {
+    stop("'floor.beta' must be NULL or a single numeric value")
+  }
+
+  # --- retrieve the data matrix ---
+  data_mat <- LayerData(object = object[[assay]], layer = layer)
+
+  all_cells  <- Cells(object[[assay]])
+  conditions <- object@meta.data[all_cells, condition_key]
+  batches    <- object@meta.data[all_cells, batch_key]
+  is_control <- conditions %in% control_label
+
+  # global control indices
+  global_ctrl_idx <- all_cells[is_control]
+  if (length(global_ctrl_idx) == 0) {
+    stop("No control samples found with '", condition_key, "' in ",
+         paste(control_label, collapse = ", "))
+  }
+
+  G <- nrow(data_mat)
+  unique_batches <- unique(batches)
+  B <- length(unique_batches)
+
+  # ---- 2. Per-batch control means Z_b (G x B matrix) -----------------------
+  ctrl_idx_list <- setNames(
+    lapply(unique_batches, function(b) all_cells[batches == b & is_control]),
+    unique_batches
+  )
+  n_ctrl <- vapply(ctrl_idx_list, length, integer(1))  # named integer vector
+
+  # Z_batch: G x B matrix (NA for batches with 0 controls)
+  Z_batch <- matrix(NA_real_, nrow = G, ncol = B,
+                    dimnames = list(rownames(data_mat), unique_batches))
+  for (b in unique_batches) {
+    nb <- n_ctrl[b]
+    if (nb >= 2) {
+      Z_batch[, b] <- rowMeans(data_mat[, ctrl_idx_list[[b]]])
+    } else if (nb == 1) {
+      Z_batch[, b] <- data_mat[, ctrl_idx_list[[b]]]
+    }
+    # nb == 0 stays NA
+  }
+
+  # Global control mean (across all individual control cells)
+  if (length(global_ctrl_idx) >= 2) {
+    Z_global <- rowMeans(data_mat[, global_ctrl_idx])
+  } else {
+    Z_global <- data_mat[, global_ctrl_idx]
+  }
+
+  # ---- 3. Estimate sigma^2_g (pooled within-batch variance) -----------------
+  # Only batches with n_ctrl >= 2 contribute
+  batches_for_sigma <- unique_batches[n_ctrl >= 2]
+  df_within <- sum(n_ctrl[batches_for_sigma] - 1)
+
+  if (df_within >= 1) {
+    SS_within <- rep(0, G)
+    for (b in batches_for_sigma) {
+      ctrl_cells <- ctrl_idx_list[[b]]
+      # centre each column by the batch control mean, then sum squares
+      resid <- data_mat[, ctrl_cells, drop = FALSE] - Z_batch[, b]
+      SS_within <- SS_within + rowSums(resid^2)
+    }
+    sigma2 <- SS_within / df_within
+  } else {
+    warning("df_within < 1: cannot estimate within-batch variance; ",
+            "setting sigma^2 = 0 (degrades to unshrunk subtraction)")
+    sigma2 <- rep(0, G)
+  }
+
+  # ---- 4. Estimate tau^2_g (between-batch variance of control means) --------
+  batches_obs <- unique_batches[n_ctrl >= 1]
+  B_obs <- length(batches_obs)
+
+  if (B_obs >= 2) {
+    n_vec  <- n_ctrl[batches_obs]  # n_b for batches with controls
+    N_total <- sum(n_vec)
+    # Weighted global mean (weighted by n_b)
+    Z_weighted <- Z_batch[, batches_obs, drop = FALSE] %*% n_vec / N_total
+
+    # MSB
+    MSB <- rep(0, G)
+    for (b in batches_obs) {
+      MSB <- MSB + n_ctrl[b] * (Z_batch[, b] - Z_weighted)^2
+    }
+    MSB <- MSB / (B_obs - 1)
+
+    # n_0 (effective sample size for unbalanced ANOVA)
+    n_0 <- (N_total - sum(n_vec^2) / N_total) / (B_obs - 1)
+
+    tau2 <- pmax((MSB - sigma2) / n_0, shrink.floor)
+  } else {
+    warning("Fewer than 2 batches with controls; setting tau^2 = 0 ",
+            "(use global mean everywhere)")
+    tau2 <- rep(0, G)
+  }
+
+  # ---- 5. Shrinkage weights and shrunk means Z*_b ---------------------------
+  # lambda[g, b] = tau2_g / (tau2_g + sigma2_g / n_b)
+  # Z*[g, b]     = lambda * Z_b + (1 - lambda) * Z_global
+  lambda_mat <- matrix(0, nrow = G, ncol = B,
+                       dimnames = list(rownames(data_mat), unique_batches))
+  Z_star <- matrix(NA_real_, nrow = G, ncol = B,
+                   dimnames = list(rownames(data_mat), unique_batches))
+
+  for (b in unique_batches) {
+    nb <- n_ctrl[b]
+    if (nb >= 1) {
+      denom <- tau2 + sigma2 / nb
+      # avoid 0/0: when both tau2 and sigma2/nb are 0, set lambda = 1
+      lam <- ifelse(denom > 0, tau2 / denom, 1)
+      lambda_mat[, b] <- lam
+      Z_star[, b] <- lam * Z_batch[, b] + (1 - lam) * Z_global
+    } else {
+      # no controls: lambda = 0, use global mean
+      lambda_mat[, b] <- 0
+      Z_star[, b] <- Z_global
+    }
+  }
+
+  # ---- 6. Per-sample regression of Z*_b with attenuation correction ----------
+  beta_vec <- setNames(rep(NA_real_, length(all_cells)), all_cells)
+
+  # Track per-batch attenuation diagnostics
+  atten_raw_denom <- setNames(rep(NA_real_, B), unique_batches)
+  atten_me_var    <- setNames(rep(NA_real_, B), unique_batches)
+  atten_denom     <- setNames(rep(NA_real_, B), unique_batches)
+  atten_clamped   <- setNames(rep(FALSE, B), unique_batches)
+
+  for (b in unique_batches) {
+    batch_cells <- all_cells[batches == b]
+    if (length(batch_cells) == 0) next
+
+    z_star_b <- Z_star[, b]       # G-length vector
+    z_bar    <- mean(z_star_b)
+    z_cent   <- z_star_b - z_bar  # centred Z*
+
+    raw_denom <- sum(z_cent^2)
+    atten_raw_denom[b] <- raw_denom
+
+    # Attenuation correction: subtract measurement error variance from denom
+    if (isTRUE(correct.attenuation) && any(sigma2 > 0)) {
+      nb <- n_ctrl[b]
+      lam_b <- lambda_mat[, b]
+      me_var <- sum(lam_b^2 * sigma2 / max(nb, 1))
+      corrected_denom <- raw_denom - me_var
+      # Clamp: at least 50% of raw denom
+      clamped <- corrected_denom < 0.5 * raw_denom
+      denom <- max(corrected_denom, 0.5 * raw_denom)
+      atten_me_var[b]  <- me_var
+      atten_denom[b]   <- denom
+      atten_clamped[b] <- clamped
+    } else {
+      atten_me_var[b] <- 0
+      atten_denom[b]  <- raw_denom
+      denom <- raw_denom
+    }
+
+    if (denom < .Machine$double.eps) {
+      # Z* is essentially constant across genes: beta = 0
+      beta_vec[batch_cells] <- 0
+      next
+    }
+
+    for (cell in batch_cells) {
+      x_i    <- data_mat[, cell]
+      x_bar  <- mean(x_i)
+      numer  <- sum(z_cent * (x_i - x_bar))
+      beta_vec[cell] <- numer / denom
+    }
+  }
+
+  # Apply floor.beta if requested
+  n_floored <- setNames(integer(B), unique_batches)
+  if (!is.null(floor.beta)) {
+    for (b in unique_batches) {
+      batch_cells <- all_cells[batches == b]
+      below <- beta_vec[batch_cells] < floor.beta
+      n_floored[b] <- sum(below, na.rm = TRUE)
+      beta_vec[batch_cells[below]] <- floor.beta
+    }
+    if (isTRUE(verbose)) {
+      total_floored <- sum(n_floored)
+      message("floor.beta = ", floor.beta, ": floored ", total_floored,
+              " / ", length(all_cells), " samples")
+    }
+  }
+
+  # ---- 7. Apply correction --------------------------------------------------
+  for (b in unique_batches) {
+    batch_cells <- all_cells[batches == b]
+    if (length(batch_cells) == 0) next
+    z_star_b <- Z_star[, b]
+    for (cell in batch_cells) {
+      data_mat[, cell] <- data_mat[, cell] - beta_vec[cell] * z_star_b
+    }
+  }
+
+  # ---- 8. Verbose output and write back -------------------------------------
+  if (isTRUE(verbose)) {
+    # Shrinkage summary
+    shrink_df <- data.frame(
+      batch  = unique_batches,
+      n_ctrl = n_ctrl[unique_batches],
+      median_lambda = vapply(unique_batches, function(b) median(lambda_mat[, b]), numeric(1)),
+      mean_lambda   = vapply(unique_batches, function(b) mean(lambda_mat[, b]),   numeric(1)),
+      stringsAsFactors = FALSE
+    )
+    message("--- Shrinkage summary ---")
+    message(paste(utils::capture.output(print(shrink_df, row.names = FALSE)), collapse = "\n"))
+
+    # Regression summary (betas shown AFTER floor.beta, if applied)
+    reg_df <- data.frame(
+      batch     = unique_batches,
+      n_samples = vapply(unique_batches,
+                         function(b) sum(batches == b), integer(1)),
+      median_beta = vapply(unique_batches,
+                           function(b) median(beta_vec[all_cells[batches == b]]), numeric(1)),
+      mean_beta   = vapply(unique_batches,
+                           function(b) mean(beta_vec[all_cells[batches == b]]),   numeric(1)),
+      sd_beta     = vapply(unique_batches,
+                           function(b) {
+                             vals <- beta_vec[all_cells[batches == b]]
+                             if (length(vals) < 2) return(NA_real_)
+                             sd(vals)
+                           }, numeric(1)),
+      stringsAsFactors = FALSE
+    )
+    if (!is.null(floor.beta)) {
+      reg_df$n_floored <- n_floored[unique_batches]
+    }
+    message("--- Regression summary ---")
+    message(paste(utils::capture.output(print(reg_df, row.names = FALSE)), collapse = "\n"))
+
+    # Attenuation correction summary
+    if (isTRUE(correct.attenuation) && any(sigma2 > 0)) {
+      atten_df <- data.frame(
+        batch        = unique_batches,
+        total_var    = round(atten_raw_denom[unique_batches], 4),
+        noise_var    = round(atten_me_var[unique_batches], 4),
+        signal_var   = round(atten_denom[unique_batches], 4),
+        noise_frac   = round(atten_me_var[unique_batches] /
+                               pmax(atten_raw_denom[unique_batches],
+                                    .Machine$double.eps), 4),
+        clamped      = atten_clamped[unique_batches],
+        stringsAsFactors = FALSE
+      )
+      message("--- Attenuation correction summary ---")
+      message("  total_var  = Var_genes(Z*_b)  [raw OLS denominator]")
+      message("  noise_var  = sum(lambda^2 * sigma^2 / n_b)  [measurement error in Z*]")
+      message("  signal_var = total_var - noise_var  [corrected denominator, clamped at 50%]")
+      message(paste(utils::capture.output(print(atten_df, row.names = FALSE)),
+                    collapse = "\n"))
+    }
+  }
+
+  LayerData(object[[assay]], layer = layer) <- data_mat
+  if (isTRUE(verbose)) {
+    message("Shrinkage + regression batch correction completed for assay '",
+            assay, "'")
+  }
+
+  return(object)
+}
+
+
 #' Perform CellAnova Batch correction
 #'
 #' CellAnova (Zhaojun Zhang et al, 2024 Nat Biotech) is a new method that can remove/mitigate batch effect in single-cell data
@@ -386,6 +758,22 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
   gc()  # Force garbage collection
 
   ## Perform SVD decomposition for res_combined
+  # Helper: try RSpectra::svds(), fall back to base::svd() when ARPACK fails
+  # (e.g. "TridiagEigen" errors on numerically rank-deficient matrices)
+  safe_svds <- function(A, k, verbose = FALSE) {
+    tryCatch(
+      RSpectra::svds(A, k = k),
+      error = function(e) {
+        if (isTRUE(verbose)) {
+          message("RSpectra::svds() failed (", conditionMessage(e),
+                  "), falling back to base::svd()")
+        }
+        res <- base::svd(A, nu = 0, nv = k)
+        list(d = res$d[seq_len(k)], v = res$v[, seq_len(k), drop = FALSE])
+      }
+    )
+  }
+
   # Compute true total variance (Frobenius norm squared = sum of ALL singular values squared)
   # This is needed because truncated SVD only returns the top-k singular values,
   # so sum(top_k_sv^2) / sum(top_k_sv^2) always reaches 1.0 at the last component.
@@ -402,7 +790,7 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
       message("Performing pilot SVD with k_pilot = ", k_pilot)
     }
 
-    pilot_svds <- RSpectra::svds(res_combined, k = k_pilot)
+    pilot_svds <- safe_svds(res_combined, k = k_pilot, verbose = verbose)
     DD1 <- pilot_svds$d
 
     # Calculate cumulative variance explained from pilot
@@ -420,7 +808,7 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
       if(isTRUE(verbose)) {
         message("Pilot SVD insufficient, performing full SVD with k_max = ", k_max)
       }
-      final_svds <- RSpectra::svds(res_combined, k = k_max)
+      final_svds <- safe_svds(res_combined, k = k_max, verbose = verbose)
       DD1 <- final_svds$d
       positive_sv <- DD1[DD1 > 0]
       variance <- cumsum(positive_sv^2) / total_var
@@ -443,7 +831,7 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
       warning("k_select too large, reduced to ", k)
     }
 
-    final_svds <- RSpectra::svds(res_combined, k = k)
+    final_svds <- safe_svds(res_combined, k = k, verbose = verbose)
 
     if(isTRUE(verbose)) {
       message("Using user-specified k = ", k, " components")
