@@ -24,6 +24,9 @@ scSLIDE is an R package to perform sample-level analysis for multi-sample single
 if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
+# Install smoother which is required by "destiny" but recently got archived. 
+install.packages("https://cran.r-project.org/src/contrib/Archive/smoother/smoother_1.1.tar.gz", repos = NULL, type = "source")
+
 # Install Bioconductor dependencies manually
 BiocManager::install(c("glmGamPoi", "destiny"))
 
