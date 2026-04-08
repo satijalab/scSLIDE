@@ -121,7 +121,9 @@ CorrectBatchMean <- function(object,
 #' Shrinkage + Regression Batch-Mean Correction
 #'
 #' Performs a shrinkage-based batch-mean correction on a sample-level Seurat
-#' object.
+#' object.  Two correction modes are available: \code{"regression"} (default)
+#' estimates a per-sample scaling factor, while \code{"subtraction"} directly
+#' subtracts the shrunk batch mean.
 #'
 #' For every gene the function estimates the between-batch variance
 #' (\eqn{\tau^2}) and within-batch sampling variance (\eqn{\sigma^2}) of the
@@ -132,13 +134,16 @@ CorrectBatchMean <- function(object,
 #' where
 #' \eqn{\lambda_{gb}=\tau^2/(\tau^2 + \sigma^2/n_b)}.
 #'
-#' A per-sample regression of the expression profile on the shrunk batch mean
-#' is used to estimate a sample-specific scaling factor \eqn{\beta_i}, and
-#' the correction applied is
+#' When \code{method = "regression"}, a per-sample regression of the expression
+#' profile on the shrunk batch mean is used to estimate a sample-specific
+#' scaling factor \eqn{\beta_i}, and the correction applied is
 #' \deqn{x^{\text{corrected}}_{gi} = x_{gi} - \hat\beta_i\,Z^*_{gb_i}.}
-#'
 #' Optionally an attenuation-correction is applied to the OLS estimate of
 #' \eqn{\beta} to account for measurement error in \eqn{Z^*}.
+#'
+#' When \code{method = "subtraction"}, the shrunk batch mean is subtracted
+#' directly (\eqn{\beta = 1} for all samples), skipping the per-sample
+#' regression step.
 #'
 #' @param object A Seurat object (sample-level).
 #' @param assay Name of the assay to correct.
@@ -153,13 +158,18 @@ CorrectBatchMean <- function(object,
 #'   control samples.
 #' @param shrink.floor Non-negative floor for the \eqn{\tau^2} estimates.
 #'   Default \code{0}.
+#' @param method Correction method. \code{"regression"} (default) estimates a
+#'   per-sample scaling factor \eqn{\beta_i} via OLS regression of each
+#'   sample's profile on the shrunk batch mean. \code{"subtraction"} directly
+#'   subtracts the shrunk batch mean (\eqn{\beta = 1} for all samples).
 #' @param correct.attenuation Logical; if \code{TRUE} the OLS regression slope
 #'   is corrected for attenuation caused by measurement error in the shrunk
 #'   batch means.  Default \code{FALSE} (the shrinkage already reduces most of
-#'   the attenuation).
+#'   the attenuation).  Only used when \code{method = "regression"}.
 #' @param floor.beta Floor applied to per-sample \eqn{\beta} estimates.
 #'   Default \code{0} (prevent negative betas, i.e., never correct in the wrong
-#'   direction).  Set to \code{NULL} to disable.
+#'   direction).  Set to \code{NULL} to disable.  Only used when
+#'   \code{method = "regression"}.
 #' @param verbose Print progress messages. Default \code{TRUE}.
 #'
 #' @return The Seurat object with the corrected data written back to the
@@ -188,6 +198,7 @@ CorrectBatchMeanShrink <- function(object,
                                    condition_key = NULL,
                                    control_label = NULL,
                                    shrink.floor = 0,
+                                   method = c("regression", "subtraction"),
                                    correct.attenuation = FALSE,
                                    floor.beta = 0,
                                    verbose = TRUE) {
@@ -226,6 +237,16 @@ CorrectBatchMeanShrink <- function(object,
   }
   if (!is.null(floor.beta) && (!is.numeric(floor.beta) || length(floor.beta) != 1)) {
     stop("'floor.beta' must be NULL or a single numeric value")
+  }
+
+  method <- match.arg(method)
+  if (method == "subtraction") {
+    if (isTRUE(correct.attenuation)) {
+      warning("'correct.attenuation' is ignored when method = \"subtraction\"")
+    }
+    if (!is.null(floor.beta) && floor.beta != 0) {
+      warning("'floor.beta' is ignored when method = \"subtraction\"")
+    }
   }
 
   # --- retrieve the data matrix ---
@@ -344,6 +365,7 @@ CorrectBatchMeanShrink <- function(object,
     }
   }
 
+  if (method == "regression") {
   # ---- 6. Per-sample regression of Z*_b with attenuation correction ----------
   beta_vec <- setNames(rep(NA_real_, length(all_cells)), all_cells)
 
@@ -422,6 +444,16 @@ CorrectBatchMeanShrink <- function(object,
     }
   }
 
+  } else {
+  # ---- 6-7. Simple subtraction of shrunk batch mean --------------------------
+  beta_vec <- setNames(rep(1, length(all_cells)), all_cells)
+  for (b in unique_batches) {
+    batch_cells <- all_cells[batches == b]
+    if (length(batch_cells) == 0) next
+    data_mat[, batch_cells] <- data_mat[, batch_cells] - Z_star[, b]
+  }
+  }
+
   # ---- 8. Verbose output and write back -------------------------------------
   if (isTRUE(verbose)) {
     # Shrinkage summary
@@ -435,6 +467,7 @@ CorrectBatchMeanShrink <- function(object,
     message("--- Shrinkage summary ---")
     message(paste(utils::capture.output(print(shrink_df, row.names = FALSE)), collapse = "\n"))
 
+    if (method == "regression") {
     # Regression summary (betas shown AFTER floor.beta, if applied)
     reg_df <- data.frame(
       batch     = unique_batches,
@@ -478,11 +511,12 @@ CorrectBatchMeanShrink <- function(object,
       message(paste(utils::capture.output(print(atten_df, row.names = FALSE)),
                     collapse = "\n"))
     }
+    }
   }
 
   LayerData(object[[assay]], layer = layer) <- data_mat
   if (isTRUE(verbose)) {
-    message("Shrinkage + regression batch correction completed for assay '",
+    message("Shrinkage + ", method, " batch correction completed for assay '",
             assay, "'")
   }
 

@@ -12,6 +12,7 @@ CorrectBatchMeanShrink(
   condition_key = NULL,
   control_label = NULL,
   shrink.floor = 0,
+  method = c("regression", "subtraction"),
   correct.attenuation = FALSE,
   floor.beta = 0,
   verbose = TRUE
@@ -38,14 +39,20 @@ control samples.}
 \item{shrink.floor}{Non-negative floor for the \eqn{\tau^2} estimates.
 Default \code{0}.}
 
+\item{method}{Correction method. \code{"regression"} (default) estimates a
+per-sample scaling factor \eqn{\beta_i} via OLS regression of each
+sample's profile on the shrunk batch mean. \code{"subtraction"} directly
+subtracts the shrunk batch mean (\eqn{\beta = 1} for all samples).}
+
 \item{correct.attenuation}{Logical; if \code{TRUE} the OLS regression slope
 is corrected for attenuation caused by measurement error in the shrunk
 batch means.  Default \code{FALSE} (the shrinkage already reduces most of
-the attenuation).}
+the attenuation).  Only used when \code{method = "regression"}.}
 
 \item{floor.beta}{Floor applied to per-sample \eqn{\beta} estimates.
 Default \code{0} (prevent negative betas, i.e., never correct in the wrong
-direction).  Set to \code{NULL} to disable.}
+direction).  Set to \code{NULL} to disable.  Only used when
+\code{method = "regression"}.}
 
 \item{verbose}{Print progress messages. Default \code{TRUE}.}
 }
@@ -55,7 +62,9 @@ specified assay layer.
 }
 \description{
 Performs a shrinkage-based batch-mean correction on a sample-level Seurat
-object.
+object.  Two correction modes are available: \code{"regression"} (default)
+estimates a per-sample scaling factor, while \code{"subtraction"} directly
+subtracts the shrunk batch mean.
 }
 \details{
 For every gene the function estimates the between-batch variance
@@ -67,13 +76,16 @@ mean:
 where
 \eqn{\lambda_{gb}=\tau^2/(\tau^2 + \sigma^2/n_b)}.
 
-A per-sample regression of the expression profile on the shrunk batch mean
-is used to estimate a sample-specific scaling factor \eqn{\beta_i}, and
-the correction applied is
+When \code{method = "regression"}, a per-sample regression of the expression
+profile on the shrunk batch mean is used to estimate a sample-specific
+scaling factor \eqn{\beta_i}, and the correction applied is
 \deqn{x^{\text{corrected}}_{gi} = x_{gi} - \hat\beta_i\,Z^*_{gb_i}.}
-
 Optionally an attenuation-correction is applied to the OLS estimate of
 \eqn{\beta} to account for measurement error in \eqn{Z^*}.
+
+When \code{method = "subtraction"}, the shrunk batch mean is subtracted
+directly (\eqn{\beta = 1} for all samples), skipping the per-sample
+regression step.
 }
 \examples{
 \dontrun{
