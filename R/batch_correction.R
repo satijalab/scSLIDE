@@ -524,6 +524,948 @@ CorrectBatchMeanShrink <- function(object,
 }
 
 
+#' Shrinkage + Regression Batch-Mean Correction (ComBat-style Empirical Bayes)
+#'
+#' Performs a control-only batch-mean correction using ComBat-style empirical
+#' Bayes shrinkage across genes, combined with v1's regression / subtraction
+#' correction framework.
+#'
+#' Like \code{\link{CorrectBatchMeanShrink}}, this function estimates batch
+#' effects from control samples only and corrects all samples via regression or
+#' subtraction.
+#' Unlike v1 (which uses per-gene ANOVA-based variance components and a
+#' normal-normal conjugate shrinkage weight), v2 standardises the control means
+#' to z-scores, computes moment-based priors \emph{across genes} (one set of
+#' hyper-parameters per batch), and shrinks via the same parametric EM
+#' (or non-parametric MC) solver used by \code{\link{CorrectBatchComBat}}.
+#'
+#' @param object A Seurat object (sample-level).
+#' @param assay Name of the assay to correct.
+#'   Default is \code{DefaultAssay(object)}.
+#' @param layer Layer within the assay that contains the data to correct.
+#'   Default is \code{"data"}.
+#' @param batch_key Column name in \code{object@@meta.data} identifying the
+#'   batch (e.g., plate, pool).
+#' @param condition_key Column name in \code{object@@meta.data} identifying the
+#'   experimental condition.
+#' @param control_label Value(s) in the \code{condition_key} column that mark
+#'   control samples.
+#' @param par.prior Logical; if \code{TRUE} (default), uses parametric
+#'   empirical Bayes estimation (EM). If \code{FALSE}, uses non-parametric
+#'   Monte Carlo integration.
+#' @param method Correction method. \code{"regression"} (default) estimates a
+#'   per-sample scaling factor \eqn{\beta_i} via OLS regression of each
+#'   sample's profile on the shrunk batch mean. \code{"subtraction"} directly
+#'   subtracts the shrunk batch mean (\eqn{\beta = 1} for all samples).
+#' @param correct.attenuation Logical; if \code{TRUE} the OLS regression slope
+#'   is corrected for attenuation caused by measurement error in the shrunk
+#'   batch means.  Default \code{FALSE}.  Only used when
+#'   \code{method = "regression"}.
+#' @param floor.beta Floor applied to per-sample \eqn{\beta} estimates.
+#'   Default \code{0} (prevent negative betas).  Set to \code{NULL} to disable.
+#'   Only used when \code{method = "regression"}.
+#' @param verbose Print progress messages. Default \code{TRUE}.
+#'
+#' @return The Seurat object with the corrected data written back to the
+#'   specified assay layer.
+#'
+#' @export
+#' @concept batch_correction
+#'
+#' @seealso \code{\link{CorrectBatchMeanShrink}},
+#'   \code{\link{CorrectBatchComBat}}
+#'
+#' @examples
+#' \dontrun{
+#' obj <- CorrectBatchMeanShrink_v2(obj, assay = "LMC",
+#'                                   batch_key = "plate",
+#'                                   condition_key = "Condition",
+#'                                   control_label = "ctrl-inj")
+#' }
+#'
+#' @importFrom SeuratObject LayerData LayerData<- DefaultAssay Cells
+#' @importFrom matrixStats rowVars
+#' @importFrom stats median setNames var
+#'
+CorrectBatchMeanShrink_v2 <- function(object,
+                                      assay             = NULL,
+                                      layer             = "data",
+                                      batch_key         = NULL,
+                                      condition_key     = NULL,
+                                      control_label     = NULL,
+                                      par.prior         = TRUE,
+                                      method            = c("regression", "subtraction"),
+                                      correct.attenuation = FALSE,
+                                      floor.beta        = 0,
+                                      verbose           = TRUE) {
+
+  # ---- 1. Input validation + data extraction --------------------------------
+  if (!inherits(object, "Seurat")) {
+    stop("'object' must be a Seurat object")
+  }
+
+  assay <- assay %||% DefaultAssay(object = object)
+  if (!assay %in% names(object@assays)) {
+    stop("Assay '", assay, "' not found in object")
+  }
+
+  if (is.null(batch_key)) {
+    stop("Please specify 'batch_key': the metadata column identifying batches")
+  }
+  if (!batch_key %in% colnames(object@meta.data)) {
+    stop("Column '", batch_key, "' not found in object metadata")
+  }
+
+  if (is.null(condition_key)) {
+    stop("Please specify 'condition_key': the metadata column identifying conditions")
+  }
+  if (!condition_key %in% colnames(object@meta.data)) {
+    stop("Column '", condition_key, "' not found in object metadata")
+  }
+
+  if (is.null(control_label)) {
+    stop("Please specify 'control_label': the value(s) marking control samples in '",
+         condition_key, "'")
+  }
+
+  if (!is.null(floor.beta) && (!is.numeric(floor.beta) || length(floor.beta) != 1)) {
+    stop("'floor.beta' must be NULL or a single numeric value")
+  }
+
+  method <- match.arg(method)
+  if (method == "subtraction") {
+    if (isTRUE(correct.attenuation)) {
+      warning("'correct.attenuation' is ignored when method = \"subtraction\"")
+    }
+    if (!is.null(floor.beta) && floor.beta != 0) {
+      warning("'floor.beta' is ignored when method = \"subtraction\"")
+    }
+  }
+
+  # --- retrieve the data matrix ---
+  data_mat <- LayerData(object = object[[assay]], layer = layer)
+
+  all_cells  <- Cells(object[[assay]])
+  conditions <- object@meta.data[all_cells, condition_key]
+  batches    <- object@meta.data[all_cells, batch_key]
+  is_control <- conditions %in% control_label
+
+  # global control indices
+  global_ctrl_idx <- all_cells[is_control]
+  if (length(global_ctrl_idx) == 0) {
+    stop("No control samples found with '", condition_key, "' in ",
+         paste(control_label, collapse = ", "))
+  }
+
+  G <- nrow(data_mat)
+  unique_batches <- unique(batches)
+  B <- length(unique_batches)
+
+  # ---- 2. Per-batch control means Z_b (G x B matrix) -----------------------
+  ctrl_idx_list <- setNames(
+    lapply(unique_batches, function(b) all_cells[batches == b & is_control]),
+    unique_batches
+  )
+  n_ctrl <- vapply(ctrl_idx_list, length, integer(1))  # named integer vector
+
+  # Z_batch: G x B matrix (NA for batches with 0 controls)
+  Z_batch <- matrix(NA_real_, nrow = G, ncol = B,
+                    dimnames = list(rownames(data_mat), unique_batches))
+  for (b in unique_batches) {
+    nb <- n_ctrl[b]
+    if (nb >= 2) {
+      Z_batch[, b] <- rowMeans(data_mat[, ctrl_idx_list[[b]]])
+    } else if (nb == 1) {
+      Z_batch[, b] <- data_mat[, ctrl_idx_list[[b]]]
+    }
+    # nb == 0 stays NA
+  }
+
+  # Global control mean (across all individual control samples)
+  if (length(global_ctrl_idx) >= 2) {
+    Z_global <- rowMeans(data_mat[, global_ctrl_idx])
+  } else {
+    Z_global <- data_mat[, global_ctrl_idx]
+  }
+
+  # ---- 3. Pooled within-batch variance (sigma2) -----------------------------
+  batches_for_sigma <- unique_batches[n_ctrl >= 2]
+  df_within <- sum(n_ctrl[batches_for_sigma] - 1)
+
+  if (df_within >= 1) {
+    SS_within <- rep(0, G)
+    for (b in batches_for_sigma) {
+      ctrl_cells <- ctrl_idx_list[[b]]
+      resid <- data_mat[, ctrl_cells, drop = FALSE] - Z_batch[, b]
+      SS_within <- SS_within + rowSums(resid^2)
+    }
+    sigma2 <- SS_within / df_within
+  } else {
+    warning("df_within < 1: cannot estimate within-batch variance; ",
+            "setting sigma^2 = median of row variances across all controls")
+    sigma2 <- matrixStats::rowVars(as.matrix(data_mat[, global_ctrl_idx, drop = FALSE]))
+  }
+
+  # Guard against zero sigma2 (would cause division by zero in standardisation)
+  sigma2_safe <- sigma2
+  sigma2_safe[sigma2_safe == 0] <- median(sigma2_safe[sigma2_safe > 0])
+
+  # ---- 4. Standardise control means (ComBat-style) --------------------------
+  batches_obs <- unique_batches[n_ctrl >= 1]
+  B_obs <- length(batches_obs)
+
+  if (B_obs < 2) {
+    stop("Need at least 2 batches with control samples for EB shrinkage, found ", B_obs)
+  }
+
+  # gamma_hat[b, g] = (Z_batch[g,b] - Z_global[g]) / sqrt(sigma2_safe[g] / n_b)
+  gamma_hat <- matrix(NA_real_, nrow = B_obs, ncol = G,
+                      dimnames = list(batches_obs, rownames(data_mat)))
+  for (i in seq_along(batches_obs)) {
+    b <- batches_obs[i]
+    gamma_hat[i, ] <- (Z_batch[, b] - Z_global) / sqrt(sigma2_safe / n_ctrl[b])
+  }
+
+  # delta_hat[b, g] = within-batch variance of standardised controls
+  delta_hat <- matrix(1, nrow = B_obs, ncol = G,
+                      dimnames = list(batches_obs, rownames(data_mat)))
+  for (i in seq_along(batches_obs)) {
+    b <- batches_obs[i]
+    if (n_ctrl[b] >= 2) {
+      # Standardise individual control samples: (x - Z_global) / sqrt(sigma2_safe)
+      s_ctrl <- sweep(data_mat[, ctrl_idx_list[[b]], drop = FALSE], 1, Z_global) /
+        sqrt(sigma2_safe)
+      delta_hat[i, ] <- matrixStats::rowVars(s_ctrl)
+    }
+    # n_ctrl == 1: keep default of 1
+  }
+
+  # ---- 5. ComBat-style EB priors across genes -------------------------------
+  gamma_bar <- rowMeans(gamma_hat)                        # length B_obs
+  t2        <- apply(gamma_hat, 1, var)                   # length B_obs
+  a_prior   <- apply(delta_hat, 1, .combat_aprior)        # length B_obs
+  b_prior   <- apply(delta_hat, 1, .combat_bprior)        # length B_obs
+
+  if (isTRUE(verbose)) {
+    message("Fitting ", if (par.prior) "parametric" else "non-parametric",
+            " EB priors on control samples (", B_obs, " batches, ", G, " genes)")
+  }
+
+  # ---- 6. EB shrinkage via EM -----------------------------------------------
+  gamma_star <- matrix(NA_real_, nrow = B_obs, ncol = G,
+                       dimnames = list(batches_obs, rownames(data_mat)))
+  delta_star <- matrix(NA_real_, nrow = B_obs, ncol = G,
+                       dimnames = list(batches_obs, rownames(data_mat)))
+
+  for (i in seq_along(batches_obs)) {
+    b <- batches_obs[i]
+
+    # Standardised control data for this batch: (G x n_b)
+    s_ctrl <- sweep(data_mat[, ctrl_idx_list[[b]], drop = FALSE], 1, Z_global) /
+      sqrt(sigma2_safe)
+
+    if (par.prior) {
+      tmp <- .combat_it_sol(
+        sdat  = s_ctrl,
+        g_hat = gamma_hat[i, ],
+        d_hat = delta_hat[i, ],
+        g_bar = gamma_bar[i],
+        t2    = t2[i],
+        a     = a_prior[i],
+        b     = b_prior[i]
+      )
+    } else {
+      tmp <- .combat_int_eprior(
+        sdat  = s_ctrl,
+        g_hat = gamma_hat[i, ],
+        d_hat = delta_hat[i, ]
+      )
+    }
+    gamma_star[i, ] <- tmp$gamma_star
+    delta_star[i, ] <- tmp$delta_star
+
+    if (isTRUE(verbose)) {
+      message("  Batch ", b, " done")
+    }
+  }
+
+  # ---- 7. Convert gamma_star back to original scale -------------------------
+  # Z_star[g, b] = Z_global[g] + gamma_star[b, g] * sqrt(sigma2_safe[g] / n_b)
+  Z_star <- matrix(NA_real_, nrow = G, ncol = B,
+                   dimnames = list(rownames(data_mat), unique_batches))
+  for (b in unique_batches) {
+    if (b %in% batches_obs) {
+      idx <- match(b, batches_obs)
+      Z_star[, b] <- Z_global + gamma_star[idx, ] * sqrt(sigma2_safe / n_ctrl[b])
+    } else {
+      # No controls in this batch: fall back to global mean (no batch effect)
+      Z_star[, b] <- Z_global
+      if (isTRUE(verbose)) {
+        warning("Batch '", b, "' has no control samples; using global control mean")
+      }
+    }
+  }
+
+  if (method == "regression") {
+  # ---- 8. Per-sample regression of Z*_b with attenuation correction ----------
+  beta_vec <- setNames(rep(NA_real_, length(all_cells)), all_cells)
+
+  # Track per-batch attenuation diagnostics
+  atten_raw_denom <- setNames(rep(NA_real_, B), unique_batches)
+  atten_me_var    <- setNames(rep(NA_real_, B), unique_batches)
+  atten_denom     <- setNames(rep(NA_real_, B), unique_batches)
+  atten_clamped   <- setNames(rep(FALSE, B), unique_batches)
+
+  for (b in unique_batches) {
+    batch_cells <- all_cells[batches == b]
+    if (length(batch_cells) == 0) next
+
+    z_star_b <- Z_star[, b]       # G-length vector
+    z_bar    <- mean(z_star_b)
+    z_cent   <- z_star_b - z_bar  # centred Z*
+
+    raw_denom <- sum(z_cent^2)
+    atten_raw_denom[b] <- raw_denom
+
+    # Attenuation correction
+    if (isTRUE(correct.attenuation) && any(sigma2 > 0)) {
+      nb <- n_ctrl[b]
+      # For v2 the measurement error in Z_star comes from the EB estimate
+      # Approximate: use sigma2 / n_b as upper bound on ME variance per gene
+      me_var <- sum(sigma2_safe / max(nb, 1))
+      corrected_denom <- raw_denom - me_var
+      clamped <- corrected_denom < 0.5 * raw_denom
+      denom <- max(corrected_denom, 0.5 * raw_denom)
+      atten_me_var[b]  <- me_var
+      atten_denom[b]   <- denom
+      atten_clamped[b] <- clamped
+    } else {
+      atten_me_var[b] <- 0
+      atten_denom[b]  <- raw_denom
+      denom <- raw_denom
+    }
+
+    if (denom < .Machine$double.eps) {
+      beta_vec[batch_cells] <- 0
+      next
+    }
+
+    for (cell in batch_cells) {
+      x_i    <- data_mat[, cell]
+      x_bar  <- mean(x_i)
+      numer  <- sum(z_cent * (x_i - x_bar))
+      beta_vec[cell] <- numer / denom
+    }
+  }
+
+  # Apply floor.beta if requested
+  n_floored <- setNames(integer(B), unique_batches)
+  if (!is.null(floor.beta)) {
+    for (b in unique_batches) {
+      batch_cells <- all_cells[batches == b]
+      below <- beta_vec[batch_cells] < floor.beta
+      n_floored[b] <- sum(below, na.rm = TRUE)
+      beta_vec[batch_cells[below]] <- floor.beta
+    }
+    if (isTRUE(verbose)) {
+      total_floored <- sum(n_floored)
+      message("floor.beta = ", floor.beta, ": floored ", total_floored,
+              " / ", length(all_cells), " samples")
+    }
+  }
+
+  # ---- 9. Apply regression correction ---------------------------------------
+  for (b in unique_batches) {
+    batch_cells <- all_cells[batches == b]
+    if (length(batch_cells) == 0) next
+    z_star_b <- Z_star[, b]
+    for (cell in batch_cells) {
+      data_mat[, cell] <- data_mat[, cell] - beta_vec[cell] * z_star_b
+    }
+  }
+
+  } else {
+  # ---- 8-9. Simple subtraction of shrunk batch mean --------------------------
+  beta_vec <- setNames(rep(1, length(all_cells)), all_cells)
+  for (b in unique_batches) {
+    batch_cells <- all_cells[batches == b]
+    if (length(batch_cells) == 0) next
+    data_mat[, batch_cells] <- data_mat[, batch_cells] - Z_star[, b]
+  }
+  }
+
+  # ---- 10. Verbose output and write back ------------------------------------
+  if (isTRUE(verbose)) {
+    # EB shrinkage summary
+    shrink_df <- data.frame(
+      batch      = batches_obs,
+      n_ctrl     = n_ctrl[batches_obs],
+      gamma_bar  = round(gamma_bar, 4),
+      t2         = round(t2, 4),
+      a_prior    = round(a_prior, 4),
+      b_prior    = round(b_prior, 4),
+      stringsAsFactors = FALSE
+    )
+    message("--- EB shrinkage summary ---")
+    message(paste(utils::capture.output(print(shrink_df, row.names = FALSE)),
+                  collapse = "\n"))
+
+    if (method == "regression") {
+    # Regression summary
+    reg_df <- data.frame(
+      batch     = unique_batches,
+      n_samples = vapply(unique_batches,
+                         function(b) sum(batches == b), integer(1)),
+      median_beta = vapply(unique_batches,
+                           function(b) median(beta_vec[all_cells[batches == b]]), numeric(1)),
+      mean_beta   = vapply(unique_batches,
+                           function(b) mean(beta_vec[all_cells[batches == b]]),   numeric(1)),
+      sd_beta     = vapply(unique_batches,
+                           function(b) {
+                             vals <- beta_vec[all_cells[batches == b]]
+                             if (length(vals) < 2) return(NA_real_)
+                             sd(vals)
+                           }, numeric(1)),
+      stringsAsFactors = FALSE
+    )
+    if (!is.null(floor.beta)) {
+      reg_df$n_floored <- n_floored[unique_batches]
+    }
+    message("--- Regression summary ---")
+    message(paste(utils::capture.output(print(reg_df, row.names = FALSE)),
+                  collapse = "\n"))
+
+    # Attenuation correction summary
+    if (isTRUE(correct.attenuation) && any(sigma2 > 0)) {
+      atten_df <- data.frame(
+        batch        = unique_batches,
+        total_var    = round(atten_raw_denom[unique_batches], 4),
+        noise_var    = round(atten_me_var[unique_batches], 4),
+        signal_var   = round(atten_denom[unique_batches], 4),
+        noise_frac   = round(atten_me_var[unique_batches] /
+                               pmax(atten_raw_denom[unique_batches],
+                                    .Machine$double.eps), 4),
+        clamped      = atten_clamped[unique_batches],
+        stringsAsFactors = FALSE
+      )
+      message("--- Attenuation correction summary ---")
+      message("  total_var  = Var_genes(Z*_b)  [raw OLS denominator]")
+      message("  noise_var  = estimated measurement error in Z*")
+      message("  signal_var = total_var - noise_var  [corrected denominator, clamped at 50%]")
+      message(paste(utils::capture.output(print(atten_df, row.names = FALSE)),
+                    collapse = "\n"))
+    }
+    }
+  }
+
+  LayerData(object[[assay]], layer = layer) <- data_mat
+  if (isTRUE(verbose)) {
+    message("EB shrinkage + ", method, " batch correction (v2) completed for assay '",
+            assay, "'")
+  }
+
+  return(object)
+}
+
+
+#' ComBat Empirical Bayes Batch Correction
+#'
+#' Performs ComBat (Johnson et al. 2007) empirical Bayes batch correction on a
+#' sample-level Seurat object.
+#'
+#' The ComBat algorithm estimates batch-specific location (mean) and scale
+#' (variance) parameters for each gene, then shrinks these estimates towards a
+#' common prior using empirical Bayes.
+#'
+#' If \code{condition_key} is provided, the corresponding condition variable is
+#' included in the model matrix as a covariate so that condition-related signal
+#' is preserved during adjustment. If \code{condition_key} is \code{NULL},
+#' ComBat runs with no covariates (null model).
+#'
+#' The ComBat internals are vendored — no dependency on the \pkg{sva} package
+#' is required.
+#'
+#' @param object A Seurat object (sample-level).
+#' @param assay Name of the assay to correct.
+#'   Default is \code{DefaultAssay(object)}.
+#' @param layer Layer within the assay that contains the data to correct.
+#'   Default is \code{"data"}.
+#' @param batch_key Column name in \code{object@@meta.data} identifying the
+#'   batch (e.g., plate, pool).
+#' @param condition_key Column name in \code{object@@meta.data} identifying the
+#'   experimental condition. Used to build the covariate model matrix so that
+#'   condition signals are preserved during batch adjustment. If \code{NULL},
+#'   ComBat runs with no covariates.
+#' @param control_label Value(s) in the \code{condition_key} column that mark
+#'   control samples. Accepted for interface consistency with
+#'   \code{CorrectBatchMeanShrink()} but is not used by ComBat's algorithm.
+#' @param par.prior Logical; if \code{TRUE} (default), uses parametric
+#'   empirical Bayes estimation. If \code{FALSE}, uses non-parametric
+#'   estimation.
+#' @param mean.only Logical; if \code{TRUE}, only corrects batch mean shifts
+#'   (no variance adjustment). Default \code{FALSE}.
+#' @param ref.batch Optional reference batch level. Data from this batch will
+#'   remain unchanged; other batches are adjusted towards it.
+#' @param verbose Print progress messages. Default \code{TRUE}.
+#'
+#' @return The Seurat object with the corrected data written back to the
+#'   specified assay layer.
+#'
+#' @references Johnson, W.E., Li, C., Rabinovic, A. (2007). Adjusting batch
+#'   effects in microarray expression data using empirical Bayes methods.
+#'   \emph{Biostatistics}, 8(1), 118--127.
+#'
+#' @export
+#' @concept batch_correction
+#'
+#' @seealso \code{\link{CorrectBatchMean}}, \code{\link{CorrectBatchMeanShrink}}
+#'
+#' @examples
+#' \dontrun{
+#' obj <- CorrectBatchComBat(obj, assay = "LMC",
+#'                           batch_key = "plate",
+#'                           condition_key = "Condition")
+#' }
+#'
+#' @importFrom SeuratObject LayerData LayerData<- DefaultAssay Cells
+#' @importFrom matrixStats rowVars
+#' @importFrom stats model.matrix var dnorm dgamma
+#'
+CorrectBatchComBat <- function(object,
+                               assay        = NULL,
+                               layer        = "data",
+                               batch_key    = NULL,
+                               condition_key = NULL,
+                               control_label = NULL,
+                               par.prior    = TRUE,
+                               mean.only    = FALSE,
+                               ref.batch    = NULL,
+                               verbose      = TRUE) {
+
+  # ---- 1. Input validation + data extraction --------------------------------
+  if (!inherits(object, "Seurat")) {
+    stop("'object' must be a Seurat object")
+  }
+
+  assay <- assay %||% DefaultAssay(object = object)
+  if (!assay %in% names(object@assays)) {
+    stop("Assay '", assay, "' not found in object")
+  }
+
+  if (is.null(batch_key)) {
+    stop("Please specify 'batch_key': the metadata column identifying batches")
+  }
+  if (!batch_key %in% colnames(object@meta.data)) {
+    stop("Column '", batch_key, "' not found in object metadata")
+  }
+
+  # Extract data matrix and metadata
+  dat <- as.matrix(LayerData(object = object[[assay]], layer = layer))
+
+  all_cells  <- Cells(object[[assay]])
+  batches    <- as.factor(object@meta.data[all_cells, batch_key])
+
+  # Check for NAs
+  if (anyNA(dat)) {
+    stop("Data matrix contains NAs. Sample-level data should not contain NAs.")
+  }
+
+  # Batch info
+  batch_levels <- levels(batches)
+  n_batch <- length(batch_levels)
+  if (n_batch < 2) {
+    stop("Need at least 2 batches for batch correction, found ", n_batch)
+  }
+
+  # Validate ref.batch
+  if (!is.null(ref.batch)) {
+    ref.batch <- as.character(ref.batch)
+    if (!ref.batch %in% batch_levels) {
+      stop("ref.batch '", ref.batch, "' not found in batch levels: ",
+           paste(batch_levels, collapse = ", "))
+    }
+  }
+
+  # Batch sample counts
+  batches_ind <- lapply(batch_levels, function(b) which(batches == b))
+  names(batches_ind) <- batch_levels
+  n_batches <- vapply(batches_ind, length, integer(1))
+
+  # Auto-switch to mean.only if any batch has only 1 sample
+  if (any(n_batches == 1) && !mean.only) {
+    if (isTRUE(verbose)) {
+      message("Note: at least one batch has only 1 sample. ",
+              "Switching to mean.only=TRUE.")
+    }
+    mean.only <- TRUE
+  }
+
+  # ---- 2. Build design matrix -----------------------------------------------
+  # Batch indicator matrix (no intercept)
+  batchmod <- model.matrix(~ -1 + batches)
+  colnames(batchmod) <- batch_levels
+
+  # Covariate model matrix
+  if (!is.null(condition_key)) {
+    if (!condition_key %in% colnames(object@meta.data)) {
+      stop("Column '", condition_key, "' not found in object metadata")
+    }
+    conditions <- as.factor(object@meta.data[all_cells, condition_key])
+    mod <- model.matrix(~ conditions)
+    # Drop the intercept column (it's redundant with batch indicators)
+    mod <- mod[, -1, drop = FALSE]
+  } else {
+    mod <- NULL
+  }
+
+  # Combine batch + covariate design
+  if (!is.null(mod) && ncol(mod) > 0) {
+    design <- cbind(batchmod, mod)
+
+    # Drop covariate columns that are confounded (linearly dependent) with
+    # batch indicators.  Batch columns (1:n_batch) are always retained;
+    # only covariate columns are candidates for removal.
+    qr_d <- qr(design)
+    if (qr_d$rank < ncol(design)) {
+      pivot_keep <- sort(qr_d$pivot[seq_len(qr_d$rank)])
+      # Identify which covariate columns were dropped
+      all_idx <- seq_len(ncol(design))
+      dropped_idx <- setdiff(all_idx, pivot_keep)
+      # Only drop covariate columns (indices > n_batch), never batch columns
+      dropped_cov <- dropped_idx[dropped_idx > n_batch]
+      keep_idx <- setdiff(all_idx, dropped_cov)
+      if (length(dropped_cov) > 0) {
+        dropped_names <- colnames(design)[dropped_cov]
+        if (isTRUE(verbose)) {
+          message("Note: dropped ", length(dropped_cov),
+                  " covariate column(s) confounded with batch: ",
+                  paste(dropped_names, collapse = ", "))
+        }
+        design <- design[, keep_idx, drop = FALSE]
+      }
+      # Re-check: if still rank-deficient after dropping covariates, error
+      if (qr(design)$rank < ncol(design)) {
+        stop("The design matrix is not full rank even after dropping ",
+             "confounded covariates. Batches may be confounded.")
+      }
+    }
+  } else {
+    design <- batchmod
+  }
+
+  n_genes <- nrow(dat)
+  n_samples <- ncol(dat)
+
+  if (isTRUE(verbose)) {
+    message("Found ", n_batch, " batches, ", n_genes, " genes, ",
+            n_samples, " samples")
+    if (!is.null(condition_key)) {
+      message("Using '", condition_key, "' as covariate in model matrix")
+    }
+    if (!is.null(ref.batch)) {
+      message("Using '", ref.batch, "' as reference batch")
+    }
+    if (mean.only) {
+      message("Correcting batch mean only (no variance adjustment)")
+    }
+  }
+
+  # ---- 3. Filter zero-variance genes ----------------------------------------
+  # Check for genes with zero variance within any batch
+  gene_vars <- matrixStats::rowVars(dat)
+  zero_var_genes <- which(gene_vars == 0)
+  n_zero_var <- length(zero_var_genes)
+
+  if (n_zero_var > 0) {
+    if (isTRUE(verbose)) {
+      message("Found ", n_zero_var, " genes with zero variance across all ",
+              "samples; excluding from adjustment")
+    }
+    dat_zero <- dat[zero_var_genes, , drop = FALSE]
+    dat <- dat[-zero_var_genes, , drop = FALSE]
+    n_genes <- nrow(dat)
+    if (n_genes == 0) {
+      stop("No genes with non-zero variance remain after filtering")
+    }
+  }
+
+  # ---- 4. Standardize data --------------------------------------------------
+  # OLS estimates: B_hat is (n_params x n_genes)
+  B_hat <- solve(crossprod(design)) %*% t(design) %*% t(dat)
+
+  # Grand mean
+  if (!is.null(ref.batch)) {
+    # Use reference batch mean as the grand mean
+    grand_mean <- t(B_hat[ref.batch, , drop = FALSE])
+  } else {
+    # Weighted average of batch means (weights = batch sample proportions)
+    n_array <- n_samples
+    batch_weights <- n_batches / n_array
+    # t(batch_weights) %*% B_hat[batch, ] = (1 x n_genes)
+    grand_mean <- crossprod(batch_weights, B_hat[batch_levels, , drop = FALSE])
+    grand_mean <- t(grand_mean)  # (n_genes x 1)
+  }
+
+  # Stand.mean: the expected value under the model (grand mean + covariates)
+  n_design <- ncol(design)
+  has_covariates <- n_design > n_batch
+  if (has_covariates) {
+    # mod part of B_hat: rows after batch indicators
+    mod_idx <- (n_batch + 1):n_design
+    stand_mean <- tcrossprod(as.numeric(grand_mean), rep(1, n_samples)) +
+      t(design[, mod_idx, drop = FALSE] %*% B_hat[mod_idx, , drop = FALSE])
+  } else {
+    stand_mean <- tcrossprod(as.numeric(grand_mean), rep(1, n_samples))
+  }
+
+  # Pooled variance
+  resid <- dat - t(design %*% B_hat)
+  var_pooled <- rowSums(resid^2) / (n_samples - ncol(design))
+  var_pooled[var_pooled == 0] <- median(var_pooled[var_pooled > 0])
+
+  # Standardize
+  s_data <- (dat - stand_mean) / sqrt(var_pooled)
+
+  if (isTRUE(verbose)) {
+    message("Standardization complete")
+  }
+
+  # ---- 5. Estimate batch parameters ------------------------------------------
+  # gamma.hat: batch mean effects on standardized data
+  gamma_hat <- matrix(NA_real_, nrow = n_batch, ncol = n_genes)
+  rownames(gamma_hat) <- batch_levels
+  for (i in seq_along(batch_levels)) {
+    b <- batch_levels[i]
+    idx <- batches_ind[[b]]
+    if (length(idx) >= 2) {
+      gamma_hat[i, ] <- rowMeans(s_data[, idx, drop = FALSE])
+    } else {
+      gamma_hat[i, ] <- s_data[, idx]
+    }
+  }
+
+  # delta.hat: batch variance effects
+  delta_hat <- matrix(NA_real_, nrow = n_batch, ncol = n_genes)
+  rownames(delta_hat) <- batch_levels
+  if (!mean.only) {
+    for (i in seq_along(batch_levels)) {
+      b <- batch_levels[i]
+      idx <- batches_ind[[b]]
+      if (length(idx) >= 2) {
+        delta_hat[i, ] <- matrixStats::rowVars(s_data[, idx, drop = FALSE])
+      } else {
+        delta_hat[i, ] <- 1  # single-sample batch
+      }
+    }
+  } else {
+    delta_hat[] <- 1
+  }
+
+  # ---- 6. Empirical Bayes shrinkage -----------------------------------------
+  # Hyperparameters for gamma (mean)
+  gamma_bar <- rowMeans(gamma_hat)
+  t2 <- apply(gamma_hat, 1, var)
+
+  # Hyperparameters for delta (variance)
+  a_prior <- apply(delta_hat, 1, .combat_aprior)
+  b_prior <- apply(delta_hat, 1, .combat_bprior)
+
+  # EB estimation per batch
+  gamma_star <- matrix(NA_real_, nrow = n_batch, ncol = n_genes)
+  delta_star <- matrix(NA_real_, nrow = n_batch, ncol = n_genes)
+  rownames(gamma_star) <- rownames(delta_star) <- batch_levels
+
+  if (isTRUE(verbose)) {
+    message("Fitting ", if (par.prior) "parametric" else "non-parametric",
+            " priors")
+  }
+
+  for (i in seq_along(batch_levels)) {
+    b <- batch_levels[i]
+    idx <- batches_ind[[b]]
+
+    if (par.prior) {
+      tmp <- .combat_it_sol(
+        sdat     = s_data[, idx, drop = FALSE],
+        g_hat    = gamma_hat[i, ],
+        d_hat    = delta_hat[i, ],
+        g_bar    = gamma_bar[i],
+        t2       = t2[i],
+        a        = a_prior[i],
+        b        = b_prior[i]
+      )
+      gamma_star[i, ] <- tmp$gamma_star
+      delta_star[i, ] <- tmp$delta_star
+    } else {
+      tmp <- .combat_int_eprior(
+        sdat  = s_data[, idx, drop = FALSE],
+        g_hat = gamma_hat[i, ],
+        d_hat = delta_hat[i, ]
+      )
+      gamma_star[i, ] <- tmp$gamma_star
+      delta_star[i, ] <- tmp$delta_star
+    }
+
+    if (isTRUE(verbose)) {
+      message("  Batch ", b, " done")
+    }
+  }
+
+  # If ref.batch: set its adjustments to identity (gamma=0, delta=1)
+  if (!is.null(ref.batch)) {
+    ref_idx <- which(batch_levels == ref.batch)
+    gamma_star[ref_idx, ] <- 0
+    delta_star[ref_idx, ] <- 1
+  }
+
+  # ---- 7. Adjust data -------------------------------------------------------
+  bayesdata <- s_data
+  for (i in seq_along(batch_levels)) {
+    b <- batch_levels[i]
+    idx <- batches_ind[[b]]
+    dsq <- sqrt(delta_star[i, ])
+    dsq[dsq == 0] <- 1  # prevent division by zero
+    bayesdata[, idx] <- (bayesdata[, idx] - gamma_star[i, ]) / dsq
+  }
+
+  # Transform back to original scale
+  bayesdata <- bayesdata * sqrt(var_pooled) + stand_mean
+
+  # ---- 8. Restore zero-variance genes and write back -------------------------
+  if (n_zero_var > 0) {
+    full_dat <- matrix(NA_real_, nrow = n_zero_var + n_genes, ncol = n_samples)
+    # Get original gene names
+    all_gene_names <- rownames(LayerData(object = object[[assay]], layer = layer))
+    rownames(full_dat) <- all_gene_names
+    colnames(full_dat) <- all_cells
+    full_dat[zero_var_genes, ] <- dat_zero
+    full_dat[-zero_var_genes, ] <- bayesdata
+    bayesdata <- full_dat
+  }
+
+  LayerData(object[[assay]], layer = layer) <- bayesdata
+
+  if (isTRUE(verbose)) {
+    message("--- ComBat summary ---")
+    message("  Batches: ", n_batch,
+            " (", paste(batch_levels, collapse = ", "), ")")
+    message("  Genes adjusted: ", n_genes)
+    if (n_zero_var > 0) {
+      message("  Genes excluded (zero variance): ", n_zero_var)
+    }
+    message("  Parametric prior: ", par.prior)
+    message("  Mean only: ", mean.only)
+    if (!is.null(ref.batch)) {
+      message("  Reference batch: ", ref.batch)
+    }
+    message("ComBat batch correction completed for assay '", assay, "'")
+  }
+
+  return(object)
+}
+
+
+# ==============================================================================
+# Internal ComBat helper functions
+# Adapted from sva::ComBat (Johnson et al. 2007)
+# These are vendored here to avoid a dependency on the sva package.
+# ==============================================================================
+
+#' Inverse-gamma shape prior for ComBat
+#' @noRd
+.combat_aprior <- function(delta_hat) {
+  m <- mean(delta_hat)
+  s2 <- var(delta_hat)
+  # When all delta_hat are identical (s2 = 0, e.g. single-control batches),
+  # the prior is degenerate.  Return a large finite shape that concentrates
+  # the inverse-gamma prior tightly around m (prior mean = b/(a-1) = m).
+  if (s2 < .Machine$double.eps) return(1002)
+  (2 * s2 + m^2) / s2
+}
+
+#' Inverse-gamma rate prior for ComBat
+#' @noRd
+.combat_bprior <- function(delta_hat) {
+  m <- mean(delta_hat)
+  s2 <- var(delta_hat)
+  if (s2 < .Machine$double.eps) return(1001 * m)
+  (m * s2 + m^3) / s2
+}
+
+#' Posterior mean for ComBat
+#' @noRd
+.combat_postmean <- function(g_hat, g_bar, n, d_star, t2) {
+  (t2 * n * g_hat + d_star * g_bar) / (t2 * n + d_star)
+}
+
+#' Posterior variance for ComBat
+#' @noRd
+.combat_postvar <- function(sum2, n, a, b) {
+  (0.5 * sum2 + b) / (n / 2 + a - 1)
+}
+
+#' Parametric EM solver for ComBat
+#' @noRd
+.combat_it_sol <- function(sdat, g_hat, d_hat, g_bar, t2, a, b,
+                           conv = 1e-4, max_iter = 5000) {
+  n <- ncol(sdat)
+  g_old <- g_hat
+  d_old <- d_hat
+  change <- 1
+  count <- 0
+
+  while (change > conv && count < max_iter) {
+    g_new <- .combat_postmean(g_hat, g_bar, n, d_old, t2)
+    sum2 <- rowSums((sdat - g_new)^2)
+    d_new <- .combat_postvar(sum2, n, a, b)
+
+    change <- max(abs(g_new - g_old) / pmax(abs(g_old), 1e-10),
+                  abs(d_new - d_old) / pmax(abs(d_old), 1e-10),
+                  na.rm = TRUE)
+    g_old <- g_new
+    d_old <- d_new
+    count <- count + 1
+  }
+
+  list(gamma_star = g_new, delta_star = d_new)
+}
+
+#' Non-parametric empirical prior for ComBat (Monte Carlo integration)
+#' @noRd
+.combat_int_eprior <- function(sdat, g_hat, d_hat) {
+  n <- ncol(sdat)
+  g_star <- d_star <- numeric(length(g_hat))
+
+  for (i in seq_along(g_hat)) {
+    # Density of g_hat[i] given each g_hat[j] as the "true" value
+    # using normal kernel with variance d_hat[i]/n
+    g_densities <- dnorm(g_hat[i], g_hat, sqrt(d_hat[i] / n))
+    # Weighted mean: posterior mean of gamma
+    if (sum(g_densities) > 0) {
+      g_star[i] <- sum(g_hat * g_densities) / sum(g_densities)
+    } else {
+      g_star[i] <- g_hat[i]
+    }
+
+    # For delta: use inverse-gamma kernel
+    # For each possible true gamma g_hat[j], compute sum_s (sdat[i,s] - g_hat[j])^2
+    x_i <- as.numeric(sdat[i, ])
+    dat_rep <- matrix(x_i, nrow = length(g_hat), ncol = n, byrow = TRUE)
+    sum2_i <- rowSums((dat_rep - g_hat)^2)
+    # inverse-gamma density for d_hat[i]
+    d_densities <- dgamma(1 / d_hat[i], shape = n / 2,
+                          rate = sum2_i / 2) / d_hat[i]^2
+    if (sum(d_densities) > 0) {
+      d_star[i] <- sum(d_hat * d_densities) / sum(d_densities)
+    } else {
+      d_star[i] <- d_hat[i]
+    }
+  }
+
+  list(gamma_star = g_star, delta_star = d_star)
+}
+
+
 #' Perform CellAnova Batch correction
 #'
 #' CellAnova (Zhaojun Zhang et al, 2024 Nat Biotech) is a new method that can remove/mitigate batch effect in single-cell data
@@ -678,6 +1620,24 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
 
   ### regression 1: calculate the overall mean effect
   batch_list <- unique(object[[integrate_key]][colnames(object[[assay]]),1])
+
+  # Check that every batch has at least as many cells as embedding dimensions.
+  # qr.coef() returns NA for underdetermined systems (n_cells < n_pcs), and
+  # those NAs silently propagate through M_overall into the final correction.
+  n_pcs <- ncol(LL)
+  small_batches <- vapply(batch_list, function(d) {
+    length(cell_donor_list[[d]]) < n_pcs
+  }, logical(1))
+  if (any(small_batches)) {
+    bad <- batch_list[small_batches]
+    bad_sizes <- vapply(bad, function(d) length(cell_donor_list[[d]]), integer(1))
+    stop("The following batches in '", integrate_key, "' have fewer cells than ",
+         "embedding dimensions (", n_pcs, "), which would produce NA regression ",
+         "coefficients:\n",
+         paste0("  ", bad, " (", bad_sizes, " cells)", collapse = "\n"),
+         "\nPlease remove these batches or reduce the number of dimensions in '",
+         reduction, "'.")
+  }
 
   # GEX_full was already extracted above (during on-disk detection)
   # For the dense path, pre-transpose once: tGEX_full is (n_cells x n_genes)
