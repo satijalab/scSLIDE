@@ -119,6 +119,10 @@
 #' @param eta Thresholding parameter that controls the sparsity of the spls method (larger --> sparser). eta should be between 0 and 1.
 #' @param features Features to compute PLS on
 #' @param save.model Logical; if TRUE, save model components (coefficients, Xmeans, Ymeans, feature.mean, feature.sd) into the misc slot for later prediction. The per-gene \code{feature.mean} and \code{feature.sd} are computed from the training \code{data} layer so that \code{PredictPLS} can scale new data into the same coordinate system. Default FALSE.
+#' @param threads Integer; number of threads for BPCells parallel computation
+#'   (IterableMatrix path only). \code{1} (default) = single-threaded;
+#'   \code{0} = auto-detect via \code{parallel::detectCores(logical = FALSE)};
+#'   values \eqn{\ge 2} use that many threads. Ignored for in-memory data.
 #' @param layer The layer in `assay` to use when running PLS analysis.
 #' @param ... Additional arguments to be passed to the PLS function
 #'
@@ -260,6 +264,7 @@ RunPLS.IterableMatrix <- function(
     seed.use = 42,
     eta = 0.5,
     save.model = FALSE,
+    threads = 1L,
     ...
 ) {
   pls.function <- match.arg(arg = pls.function)
@@ -280,12 +285,13 @@ RunPLS.IterableMatrix <- function(
 
   if (pls.function == "cppls") {
     pls.results <- cppls_ondisk(X = object, Y = Y_mat, Y.add = Y.add,
-                                ncomp = ncomp, ...)
+                                ncomp = ncomp, threads = threads, ...)
   } else if (pls.function == "plsr") {
     if (!is.null(Y.add)) {
       warning("Y.add is not supported for plsr/kernelpls and will be ignored")
     }
-    pls.results <- kernelpls(X = object, Y = Y_mat, ncomp = ncomp, ...)
+    pls.results <- kernelpls(X = object, Y = Y_mat, ncomp = ncomp,
+                             threads = threads, ...)
   } else {
     rlang::abort("Only pls.function = 'plsr' or 'cppls' is supported for IterableMatrix currently")
   }
@@ -353,6 +359,7 @@ RunPLS.Assay <- function(
     seed.use = 42,
     eta = 0.5,
     save.model = FALSE,
+    threads = 1L,
     ...
 ) {
   # Get internal function from Seurat
@@ -377,6 +384,7 @@ RunPLS.Assay <- function(
     seed.use = seed.use,
     eta = eta,
     save.model = save.model,
+    threads = threads,
     ...
 
   )
@@ -403,6 +411,7 @@ RunPLS.StdAssay <- function(
     seed.use = 42,
     eta = 0.5,
     save.model = FALSE,
+    threads = 1L,
     ...
 ) {
   # Get internal function from Seurat
@@ -428,6 +437,7 @@ RunPLS.StdAssay <- function(
     seed.use = seed.use,
     eta = eta,
     save.model = save.model,
+    threads = threads,
     ...
 
   )
@@ -453,6 +463,7 @@ RunPLS.Seurat <- function(
     seed.use = 42,
     eta = 0.5,
     save.model = FALSE,
+    threads = 1L,
     ...
 ) {
   assay <- assay %||% DefaultAssay(object = object)
@@ -510,6 +521,7 @@ RunPLS.Seurat <- function(
     seed.use = seed.use,
     eta = eta,
     save.model = save.model,
+    threads = threads,
     ...
   )
 
@@ -569,6 +581,10 @@ kernelpls <- function(X, ...) UseMethod("kernelpls")
 #' @param center Logical; whether to center X and Y (default \code{TRUE}).
 #' @param stripped Logical; if \code{TRUE} return only coefficients, Xmeans, and
 #'   Ymeans for speed (default \code{FALSE}).
+#' @param threads Integer; number of threads for BPCells parallel computation.
+#'   \code{1} (default) = single-threaded;
+#'   \code{0} = auto-detect via \code{parallel::detectCores(logical = FALSE)};
+#'   values \eqn{\ge 2} use that many threads.
 #' @param ... Additional arguments (currently unused).
 #'
 #' @return A list with components:
@@ -602,7 +618,7 @@ kernelpls <- function(X, ...) UseMethod("kernelpls")
 #' @export
 #' @method kernelpls IterableMatrix
 kernelpls.IterableMatrix <- function(X, Y, ncomp, center = TRUE,
-                                      stripped = FALSE, ...) {
+                                      stripped = FALSE, threads = 1L, ...) {
   if (!requireNamespace("BPCells", quietly = TRUE)) {
     rlang::abort("Package 'BPCells' is required for kernelpls.IterableMatrix but is not installed.")
   }
@@ -614,6 +630,9 @@ kernelpls.IterableMatrix <- function(X, Y, ncomp, center = TRUE,
   if (ncomp <= 0) {
     rlang::abort("ncomp must be a positive integer")
   }
+
+  threads <- as.integer(threads)
+  if (threads < 0L) rlang::abort("threads must be a non-negative integer")
 
   # Convert factor/character Y to a dummy indicator matrix
   if (is.factor(Y) || is.character(Y)) {
@@ -645,9 +664,17 @@ kernelpls.IterableMatrix <- function(X, Y, ncomp, center = TRUE,
   # treats rows as features and columns as samples.
   is_transposed <- !X@transpose
 
+  if (threads == 0L) {
+    threads <- max(parallel::detectCores(logical = FALSE), 1L, na.rm = TRUE)
+  }
+
+  n_splits <- min(threads * 4L, n)
+
+  parallel_split <- getFromNamespace("parallel_split", "BPCells")
   iterate_matrix <- getFromNamespace("iterate_matrix", "BPCells")
   it <- X %>%
     BPCells::convert_matrix_type("double") %>%
+    parallel_split(threads, n_splits) %>%
     iterate_matrix()
 
   result <- kernelpls_cpp(it, Y, as.integer(ncomp), center, stripped, is_transposed)
@@ -703,6 +730,10 @@ cppls_ondisk <- function(X, ...) UseMethod("cppls_ondisk")
 #'   Ymeans for speed (default \code{FALSE}).
 #' @param w.tol Numeric; threshold for zeroing small loading weights (default 0).
 #' @param X.tol Numeric; threshold for small-norm variable detection (default 1e-12).
+#' @param threads Integer; number of threads for BPCells parallel computation.
+#'   \code{1} (default) = single-threaded;
+#'   \code{0} = auto-detect via \code{parallel::detectCores(logical = FALSE)};
+#'   values \eqn{\ge 2} use that many threads.
 #' @param ... Additional arguments (currently unused).
 #'
 #' @return A list with components:
@@ -733,7 +764,8 @@ cppls_ondisk <- function(X, ...) UseMethod("cppls_ondisk")
 #' @method cppls_ondisk IterableMatrix
 cppls_ondisk.IterableMatrix <- function(X, Y, Y.add = NULL, ncomp,
                                          center = TRUE, stripped = FALSE,
-                                         w.tol = 0, X.tol = 1e-12, ...) {
+                                         w.tol = 0, X.tol = 1e-12,
+                                         threads = 1L, ...) {
   if (!requireNamespace("BPCells", quietly = TRUE)) {
     rlang::abort("Package 'BPCells' is required for cppls_ondisk.IterableMatrix but is not installed.")
   }
@@ -745,6 +777,9 @@ cppls_ondisk.IterableMatrix <- function(X, Y, Y.add = NULL, ncomp,
   if (ncomp <= 0) {
     rlang::abort("ncomp must be a positive integer")
   }
+
+  threads <- as.integer(threads)
+  if (threads < 0L) rlang::abort("threads must be a non-negative integer")
 
   # Convert factor/character Y to a dummy indicator matrix
   if (is.factor(Y) || is.character(Y)) {
@@ -791,9 +826,17 @@ cppls_ondisk.IterableMatrix <- function(X, Y, Y.add = NULL, ncomp,
 
   is_transposed <- !X@transpose
 
+  if (threads == 0L) {
+    threads <- max(parallel::detectCores(logical = FALSE), 1L, na.rm = TRUE)
+  }
+
+  n_splits <- min(threads * 4L, n)
+
+  parallel_split <- getFromNamespace("parallel_split", "BPCells")
   iterate_matrix <- getFromNamespace("iterate_matrix", "BPCells")
   it <- X %>%
     BPCells::convert_matrix_type("double") %>%
+    parallel_split(threads, n_splits) %>%
     iterate_matrix()
 
   result <- cppls_cpp(it, Y, Y_add_mat, as.integer(ncomp), center, stripped,
