@@ -1,3 +1,90 @@
+# Resolve Y (or Y.add) into a numeric matrix.
+#
+# Accepts a numeric matrix (returned as-is), a bare numeric vector
+# (promoted to single-column matrix), or a data.frame (converted via
+# model.matrix(~. + 0, data = ...)).  Character vectors are NOT
+# handled here; the Seurat method resolves those before calling this helper.
+#
+# @param Y Input response object.
+# @param expected_nrow Expected number of rows (for validation); NULL skips.
+# @param label Label used in error messages (e.g. "Y", "Y.add").
+# @return A numeric matrix, or NULL if Y is NULL.
+# @keywords internal
+.resolve_Y_matrix <- function(Y, expected_nrow = NULL, label = "Y") {
+  if (is.null(Y)) return(NULL)
+  if (is.matrix(Y) && is.numeric(Y)) {
+    Y_mat <- Y
+  } else if (is.numeric(Y) && is.null(dim(Y))) {
+    # bare numeric vector -> single-column matrix
+    Y_mat <- matrix(Y, ncol = 1)
+  } else if (is.data.frame(Y)) {
+    Y_mat <- model.matrix(~. + 0, data = Y)
+  } else {
+    stop(sprintf(
+      "'%s' must be a numeric matrix, a data.frame, or a character vector of metadata column names. Got: %s",
+      label, paste(class(Y), collapse = ", ")
+    ))
+  }
+  if (!is.null(expected_nrow) && nrow(Y_mat) != expected_nrow) {
+    stop(sprintf(
+      "nrow(%s) is %d but expected %d (number of cells/samples).",
+      label, nrow(Y_mat), expected_nrow
+    ))
+  }
+  Y_mat
+}
+
+# Compute R2 and RMSEP from raw Y and fitted values (no pls model object needed).
+#
+# @param Y n x q response matrix.
+# @param fitted_values n x q x ncomp array of cumulative fitted values.
+# @return A list with \code{$R2} and \code{$RMSEP}, each an \code{mvrVal}-class
+#   object matching the structure of \code{pls::R2()} / \code{pls::RMSEP()}.
+# @keywords internal
+.compute_r2_rmsep <- function(Y, fitted_values) {
+  Y <- as.matrix(Y)
+  n <- nrow(Y)
+  q <- ncol(Y)
+  ncomp <- dim(fitted_values)[3]
+
+  # SST per response (intercept-only model = column means)
+  Y_mean <- matrix(colMeans(Y), nrow = n, ncol = q, byrow = TRUE)
+  SST <- colSums((Y - Y_mean)^2)  # length q
+
+  # R2$val layout from pls: 1 x (ncomp+1) x q
+  # [1,1,] = intercept (0 comps), [1,a+1,] = a comps
+  R2_val <- array(NA_real_, dim = c(1, ncomp + 1, q))
+  RMSEP_val <- array(NA_real_, dim = c(1, ncomp + 1, q))
+
+  # Intercept-only model
+  R2_val[1, 1, ] <- 0
+  RMSEP_val[1, 1, ] <- sqrt(SST / n)
+
+  for (a in seq_len(ncomp)) {
+    fitted_a <- fitted_values[, , a, drop = FALSE]
+    dim(fitted_a) <- c(n, q)
+    SSE <- colSums((Y - fitted_a)^2)
+    R2_val[1, a + 1, ] <- 1 - SSE / SST
+    RMSEP_val[1, a + 1, ] <- sqrt(SSE / n)
+  }
+
+  # Set dimnames matching pls convention
+  comp_names <- c("(Intercept)", paste(seq_len(ncomp), "comps"))
+  resp_names <- colnames(Y)
+  if (is.null(resp_names)) resp_names <- paste0("Y", seq_len(q))
+
+  dimnames(R2_val) <- list("train", comp_names, resp_names)
+  dimnames(RMSEP_val) <- list("train", comp_names, resp_names)
+
+  R2_out <- list(val = R2_val, type = "train")
+  class(R2_out) <- "mvrVal"
+
+  RMSEP_out <- list(val = RMSEP_val, type = "train")
+  class(RMSEP_out) <- "mvrVal"
+
+  list(R2 = R2_out, RMSEP = RMSEP_out)
+}
+
 #' Run Partial Least Squares (PLS) on Seurat Objects
 #'
 #' Performs Partial Least Squares regression analysis on single-cell data.
@@ -6,9 +93,20 @@
 #' @param object An object to run PLS on
 #' @param assay Name of Assay PLS is being run on
 #' @param ncomp Number of components to compute
-#' @param Y a vector or matrix of responses, i.e., the dependent variable that PLS regresses X on. The length / number of rows should be the same as the number of cells.
-#' Y can have multiple columns.
-#' @param Y.add a vector or matrix of additional responses containing relevant information about the observations. Only used for cppls.
+#' @param Y The response variable(s) for PLS regression.
+#'   Accepted formats:
+#'   \itemize{
+#'     \item A character vector of column names in the Seurat object metadata
+#'           (Seurat method only).
+#'     \item A \code{data.frame}, which is converted via
+#'           \code{model.matrix(~. + 0, data = Y)}.
+#'     \item A numeric matrix (used as-is).
+#'     \item A numeric vector (promoted to a single-column matrix).
+#'   }
+#'   The number of rows must match the number of cells/samples.
+#' @param Y.add Additional response variable(s) containing relevant
+#'   information about the observations. Only used for cppls. Accepts the same
+#'   formats as \code{Y}.
 #' @param pls.function PLS function from pls package to run (options: plsr, spls, cppls)
 #' @param verbose Print the top genes associated with high/low loadings for
 #' the components
@@ -21,6 +119,10 @@
 #' @param eta Thresholding parameter that controls the sparsity of the spls method (larger --> sparser). eta should be between 0 and 1.
 #' @param features Features to compute PLS on
 #' @param save.model Logical; if TRUE, save model components (coefficients, Xmeans, Ymeans, feature.mean, feature.sd) into the misc slot for later prediction. The per-gene \code{feature.mean} and \code{feature.sd} are computed from the training \code{data} layer so that \code{PredictPLS} can scale new data into the same coordinate system. Default FALSE.
+#' @param threads Integer; number of threads for BPCells parallel computation
+#'   (IterableMatrix path only). \code{1} (default) = single-threaded;
+#'   \code{0} = auto-detect via \code{parallel::detectCores(logical = FALSE)};
+#'   values \eqn{\ge 2} use that many threads. Ignored for in-memory data.
 #' @param layer The layer in `assay` to use when running PLS analysis.
 #' @param ... Additional arguments to be passed to the PLS function
 #'
@@ -30,8 +132,12 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Run PLS on a Seurat object
+#' # Run PLS on a Seurat object using metadata column names
 #' seurat_obj <- RunPLS(seurat_obj, Y = "condition", ncomp = 10)
+#'
+#' # Run PLS with a pre-built numeric design matrix
+#' design_mat <- model.matrix(~ age + sex, data = seurat_obj[[]])
+#' seurat_obj <- RunPLS(seurat_obj, Y = design_mat, ncomp = 10)
 #' }
 #'
 #' @import pls
@@ -76,12 +182,12 @@ RunPLS.default <- function(
   ncomp <- min(ncomp, ncol(x = object))
   pls.fxn <- eval(expr = parse(text = pls.function))
 
-  Y_mat <- model.matrix(~. + 0, data = Y)
+  Y_mat <- .resolve_Y_matrix(Y, expected_nrow = ncol(object), label = "Y")
   # run PLS using the selected method
   if (pls.function == "cppls" & !is.null(Y.add)){
     requireNamespace("pls", quietly = FALSE)
     message("Fitting Y.add in CPPLS...")
-    Y.add <- model.matrix(~. + 0, data = Y.add)
+    Y.add <- .resolve_Y_matrix(Y.add, expected_nrow = ncol(object), label = "Y.add")
     pls.results <- pls.fxn(Y_mat ~ t(object), ncomp = ncomp, validation = "none", Y.add = Y.add, ...)
   } else if (pls.function == "spls") {
     requireNamespace("spls", quietly = FALSE)
@@ -158,6 +264,7 @@ RunPLS.IterableMatrix <- function(
     seed.use = 42,
     eta = 0.5,
     save.model = FALSE,
+    threads = 1L,
     ...
 ) {
   pls.function <- match.arg(arg = pls.function)
@@ -166,44 +273,51 @@ RunPLS.IterableMatrix <- function(
     set.seed(seed = seed.use)
   }
 
-  n.samples <- if (object@transpose) nrow(object) else ncol(object)
-  n.features <- if (object@transpose) ncol(object) else nrow(object)
+  n.samples <- ncol(object)
+  n.features <- nrow(object)
   max.ncomp <- min(n.samples, n.features) - 1L
   if (max.ncomp < 1L) {
     rlang::abort("IterableMatrix must have at least 2 samples/features to run PLS.")
   }
   ncomp <- min(ncomp, max.ncomp)
 
-  Y_mat <- model.matrix(~. + 0, data = Y)
+  Y_mat <- .resolve_Y_matrix(Y, expected_nrow = n.samples, label = "Y")
 
   if (pls.function == "cppls") {
     pls.results <- cppls_ondisk(X = object, Y = Y_mat, Y.add = Y.add,
-                                ncomp = ncomp, ...)
+                                ncomp = ncomp, threads = threads, ...)
   } else if (pls.function == "plsr") {
     if (!is.null(Y.add)) {
       warning("Y.add is not supported for plsr/kernelpls and will be ignored")
     }
-    pls.results <- kernelpls(X = object, Y = Y_mat, ncomp = ncomp, ...)
+    pls.results <- kernelpls(X = object, Y = Y_mat, ncomp = ncomp,
+                             threads = threads, ...)
   } else {
     rlang::abort("Only pls.function = 'plsr' or 'cppls' is supported for IterableMatrix currently")
   }
 
   feature.loadings <- unclass(pls.results$projection)
   colnames(feature.loadings) <- paste0(reduction.key, seq_len(ncol(feature.loadings)))
-  feature.names <- if (object@transpose) colnames(object) else rownames(object)
+  feature.names <- rownames(object)
   if (!is.null(feature.names) && length(feature.names) == nrow(feature.loadings)) {
     rownames(feature.loadings) <- feature.names
   }
 
   cell.embeddings <- unclass(pls.results$scores)
   colnames(cell.embeddings) <- paste0(reduction.key, seq_len(ncol(cell.embeddings)))
-  sample.names <- if (object@transpose) rownames(object) else colnames(object)
+  sample.names <- colnames(object)
   if (!is.null(sample.names) && length(sample.names) == nrow(cell.embeddings)) {
     rownames(cell.embeddings) <- sample.names
   }
 
   stdev <- pls.results$Xvar
-  misc <- list()
+  r2_rmsep <- .compute_r2_rmsep(Y_mat, pls.results$fitted.values)
+  misc <- list(R2 = r2_rmsep$R2,
+               RMSEP = r2_rmsep$RMSEP)
+  # diagnostic message matching RunPLS.default()
+  R2 <- matrix(r2_rmsep$R2$val, byrow = TRUE, ncol = dim(r2_rmsep$R2$val)[2])
+  mean_final_R2 <- mean(R2[nrow(R2), ])
+  message("The average R2 of the PLS model is ", mean_final_R2)
   if (save.model) {
     misc$model <- list(
       coefficients = pls.results$coefficients,
@@ -245,6 +359,7 @@ RunPLS.Assay <- function(
     seed.use = 42,
     eta = 0.5,
     save.model = FALSE,
+    threads = 1L,
     ...
 ) {
   # Get internal function from Seurat
@@ -269,6 +384,7 @@ RunPLS.Assay <- function(
     seed.use = seed.use,
     eta = eta,
     save.model = save.model,
+    threads = threads,
     ...
 
   )
@@ -295,6 +411,7 @@ RunPLS.StdAssay <- function(
     seed.use = 42,
     eta = 0.5,
     save.model = FALSE,
+    threads = 1L,
     ...
 ) {
   # Get internal function from Seurat
@@ -320,6 +437,7 @@ RunPLS.StdAssay <- function(
     seed.use = seed.use,
     eta = eta,
     save.model = save.model,
+    threads = threads,
     ...
 
   )
@@ -345,15 +463,48 @@ RunPLS.Seurat <- function(
     seed.use = 42,
     eta = 0.5,
     save.model = FALSE,
+    threads = 1L,
     ...
 ) {
   assay <- assay %||% DefaultAssay(object = object)
   assay <- match.arg(arg = assay, choices = Assays(object = object))
   pls.function <- match.arg(arg = pls.function)
 
-  #
-  Y <- object[[Y]][Cells(object[[assay]]), , drop = F]
-  if(!is.null(Y.add)) Y.add <- object[[Y.add]][Cells(object[[assay]]), , drop = F]
+  # Resolve Y: character -> metadata lookup; matrix/data.frame -> use directly
+  cells <- Cells(object[[assay]])
+  if (is.character(Y)) {
+    Y <- object[[Y]][cells, , drop = FALSE]
+  } else if (is.matrix(Y) || is.data.frame(Y) || (is.numeric(Y) && is.null(dim(Y)))) {
+    Y <- .resolve_Y_matrix(Y, expected_nrow = length(cells), label = "Y")
+    # If rownames exist, reorder to match assay cell order
+    if (!is.null(rownames(Y))) {
+      missing <- setdiff(cells, rownames(Y))
+      if (length(missing) > 0) {
+        stop(sprintf("Y is missing %d cells present in the assay.", length(missing)))
+      }
+      Y <- Y[cells, , drop = FALSE]
+    }
+  } else {
+    stop("'Y' must be a character vector of metadata column names, a numeric matrix/vector, or a data.frame.")
+  }
+
+  # Resolve Y.add with the same logic
+  if (!is.null(Y.add)) {
+    if (is.character(Y.add)) {
+      Y.add <- object[[Y.add]][cells, , drop = FALSE]
+    } else if (is.matrix(Y.add) || is.data.frame(Y.add) || (is.numeric(Y.add) && is.null(dim(Y.add)))) {
+      Y.add <- .resolve_Y_matrix(Y.add, expected_nrow = length(cells), label = "Y.add")
+      if (!is.null(rownames(Y.add))) {
+        missing <- setdiff(cells, rownames(Y.add))
+        if (length(missing) > 0) {
+          stop(sprintf("Y.add is missing %d cells present in the assay.", length(missing)))
+        }
+        Y.add <- Y.add[cells, , drop = FALSE]
+      }
+    } else {
+      stop("'Y.add' must be a character vector of metadata column names, a numeric matrix/vector, or a data.frame.")
+    }
+  }
 
   reduction.data <- RunPLS(
     object = object[[assay]],
@@ -370,6 +521,7 @@ RunPLS.Seurat <- function(
     seed.use = seed.use,
     eta = eta,
     save.model = save.model,
+    threads = threads,
     ...
   )
 
@@ -429,6 +581,10 @@ kernelpls <- function(X, ...) UseMethod("kernelpls")
 #' @param center Logical; whether to center X and Y (default \code{TRUE}).
 #' @param stripped Logical; if \code{TRUE} return only coefficients, Xmeans, and
 #'   Ymeans for speed (default \code{FALSE}).
+#' @param threads Integer; number of threads for BPCells parallel computation.
+#'   \code{1} (default) = single-threaded;
+#'   \code{0} = auto-detect via \code{parallel::detectCores(logical = FALSE)};
+#'   values \eqn{\ge 2} use that many threads.
 #' @param ... Additional arguments (currently unused).
 #'
 #' @return A list with components:
@@ -462,7 +618,7 @@ kernelpls <- function(X, ...) UseMethod("kernelpls")
 #' @export
 #' @method kernelpls IterableMatrix
 kernelpls.IterableMatrix <- function(X, Y, ncomp, center = TRUE,
-                                      stripped = FALSE, ...) {
+                                      stripped = FALSE, threads = 1L, ...) {
   if (!requireNamespace("BPCells", quietly = TRUE)) {
     rlang::abort("Package 'BPCells' is required for kernelpls.IterableMatrix but is not installed.")
   }
@@ -474,6 +630,9 @@ kernelpls.IterableMatrix <- function(X, Y, ncomp, center = TRUE,
   if (ncomp <= 0) {
     rlang::abort("ncomp must be a positive integer")
   }
+
+  threads <- as.integer(threads)
+  if (threads < 0L) rlang::abort("threads must be a non-negative integer")
 
   # Convert factor/character Y to a dummy indicator matrix
   if (is.factor(Y) || is.character(Y)) {
@@ -487,13 +646,10 @@ kernelpls.IterableMatrix <- function(X, Y, ncomp, center = TRUE,
     rlang::abort("Y must be numeric (or a factor/character vector for classification)")
   }
 
-  # BPCells matrices are features x samples (p x n).
-  # The C++ code handles the transpose internally via the transpose flag.
-  # Determine n (samples) and p (features) from the stored layout:
-  #   If X@transpose is FALSE (default), stored as p x n -> n = ncol(X), p = nrow(X)
-  #   If X@transpose is TRUE, stored as n x p -> n = nrow(X), p = ncol(X)
-  n <- if (X@transpose) nrow(X) else ncol(X)
-  p <- if (X@transpose) ncol(X) else nrow(X)
+  # BPCells' nrow()/ncol() already account for @transpose, so they always
+  # return the user-facing dimensions: nrow = features, ncol = samples.
+  n <- ncol(X)
+  p <- nrow(X)
   q <- ncol(Y)
 
   if (n != nrow(Y)) {
@@ -508,9 +664,17 @@ kernelpls.IterableMatrix <- function(X, Y, ncomp, center = TRUE,
   # treats rows as features and columns as samples.
   is_transposed <- !X@transpose
 
+  if (threads == 0L) {
+    threads <- max(parallel::detectCores(logical = FALSE), 1L, na.rm = TRUE)
+  }
+
+  n_splits <- min(threads * 4L, n)
+
+  parallel_split <- getFromNamespace("parallel_split", "BPCells")
   iterate_matrix <- getFromNamespace("iterate_matrix", "BPCells")
   it <- X %>%
     BPCells::convert_matrix_type("double") %>%
+    parallel_split(threads, n_splits) %>%
     iterate_matrix()
 
   result <- kernelpls_cpp(it, Y, as.integer(ncomp), center, stripped, is_transposed)
@@ -566,6 +730,10 @@ cppls_ondisk <- function(X, ...) UseMethod("cppls_ondisk")
 #'   Ymeans for speed (default \code{FALSE}).
 #' @param w.tol Numeric; threshold for zeroing small loading weights (default 0).
 #' @param X.tol Numeric; threshold for small-norm variable detection (default 1e-12).
+#' @param threads Integer; number of threads for BPCells parallel computation.
+#'   \code{1} (default) = single-threaded;
+#'   \code{0} = auto-detect via \code{parallel::detectCores(logical = FALSE)};
+#'   values \eqn{\ge 2} use that many threads.
 #' @param ... Additional arguments (currently unused).
 #'
 #' @return A list with components:
@@ -596,7 +764,8 @@ cppls_ondisk <- function(X, ...) UseMethod("cppls_ondisk")
 #' @method cppls_ondisk IterableMatrix
 cppls_ondisk.IterableMatrix <- function(X, Y, Y.add = NULL, ncomp,
                                          center = TRUE, stripped = FALSE,
-                                         w.tol = 0, X.tol = 1e-12, ...) {
+                                         w.tol = 0, X.tol = 1e-12,
+                                         threads = 1L, ...) {
   if (!requireNamespace("BPCells", quietly = TRUE)) {
     rlang::abort("Package 'BPCells' is required for cppls_ondisk.IterableMatrix but is not installed.")
   }
@@ -608,6 +777,9 @@ cppls_ondisk.IterableMatrix <- function(X, Y, Y.add = NULL, ncomp,
   if (ncomp <= 0) {
     rlang::abort("ncomp must be a positive integer")
   }
+
+  threads <- as.integer(threads)
+  if (threads < 0L) rlang::abort("threads must be a non-negative integer")
 
   # Convert factor/character Y to a dummy indicator matrix
   if (is.factor(Y) || is.character(Y)) {
@@ -639,9 +811,10 @@ cppls_ondisk.IterableMatrix <- function(X, Y, Y.add = NULL, ncomp,
     }
   }
 
-  # BPCells matrices are features x samples (p x n).
-  n <- if (X@transpose) nrow(X) else ncol(X)
-  p <- if (X@transpose) ncol(X) else nrow(X)
+  # BPCells' nrow()/ncol() already account for @transpose, so they always
+  # return the user-facing dimensions: nrow = features, ncol = samples.
+  n <- ncol(X)
+  p <- nrow(X)
   q <- ncol(Y)
 
   if (n != nrow(Y)) {
@@ -653,9 +826,17 @@ cppls_ondisk.IterableMatrix <- function(X, Y, Y.add = NULL, ncomp,
 
   is_transposed <- !X@transpose
 
+  if (threads == 0L) {
+    threads <- max(parallel::detectCores(logical = FALSE), 1L, na.rm = TRUE)
+  }
+
+  n_splits <- min(threads * 4L, n)
+
+  parallel_split <- getFromNamespace("parallel_split", "BPCells")
   iterate_matrix <- getFromNamespace("iterate_matrix", "BPCells")
   it <- X %>%
     BPCells::convert_matrix_type("double") %>%
+    parallel_split(threads, n_splits) %>%
     iterate_matrix()
 
   result <- cppls_cpp(it, Y, Y_add_mat, as.integer(ncomp), center, stripped,
