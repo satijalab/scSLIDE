@@ -468,9 +468,11 @@ GenerateSampleObject <- function(
 #' Wraps \code{\link{GenerateSampleObject}} with a pre-processing step that
 #' downsamples cells so that cell-type proportions are harmonized across batches
 #' within each condition. For each condition, the target proportion for each cell
-#' type is the median across batches. A bottleneck-based downsampling is then
-#' applied per (condition, batch) to match those target proportions as closely as
-#' possible.
+#' type is the median across batches. Over-represented cell types (those whose
+#' actual proportion exceeds the target) are trimmed down, while
+#' under-represented types keep all their cells. Cell types whose target
+#' proportion falls below \code{min.prop} are excluded from harmonization
+#' entirely and pass through unchanged.
 #'
 #' @param object Seurat object (must already contain a Neighbor object, e.g.
 #'   from \code{\link{PrepareSampleObject}})
@@ -481,6 +483,10 @@ GenerateSampleObject <- function(
 #' @param group.by Metadata column identifying sample identity (e.g. donor).
 #'   Default is \code{"ident"}.
 #' @param cell_type_key Metadata column identifying the cell-type annotation
+#' @param min.prop Minimum target proportion threshold. Cell types whose
+#'   median (target) proportion is below this value are excluded from
+#'   harmonization and all their cells are kept as-is. Set to 0 to
+#'   harmonize every cell type. Default is 0.001.
 #' @param seed Random seed for reproducible downsampling. Default is 42.
 #' @param verbose Print progress and diagnostic messages. Default is TRUE.
 #' @param nn.name Name of the Neighbor object. If NULL, inferred from the
@@ -513,6 +519,7 @@ GenerateSampleObject_v2 <- function(
     condition_key,
     group.by = "ident",
     cell_type_key,
+    min.prop = 0.001,
     seed = 42,
     verbose = TRUE,
     # --- forwarded to GenerateSampleObject ---
@@ -613,6 +620,16 @@ GenerateSampleObject_v2 <- function(
 
   # ------------------------------------------------------------------
   # Step 4 & 5 — Downsample and collect retained cells
+  #
+  # Strategy: single-pass capping.
+  #   - Cell types with target proportion < min.prop (or == 0) bypass
+
+  #     harmonization entirely (all cells kept).
+  #   - Among harmonized types, target proportions are renormalized to
+  #     sum to 1. Each type is capped at floor(total_h * tp_renorm),
+  #     where total_h is the original cell count of harmonized types in
+  #     this (condition, batch). Over-represented types are trimmed;
+  #     under-represented types keep all their cells.
   # ------------------------------------------------------------------
   set.seed(seed)
   retained_cells <- character(0)
@@ -643,39 +660,48 @@ GenerateSampleObject_v2 <- function(
 
       # Types present in this batch
       types_present <- names(N)[N > 0]
-      # Types with nonzero target and present in this batch
-      types_with_target <- types_present[tp[types_present] > 0]
-      # Types with zero target but present (only in this batch, median was 0)
-      types_zero_target <- types_present[tp[types_present] == 0]
 
-      if (length(types_with_target) == 0) {
-        # All present types have zero target — keep everything
+      # Classify types into harmonized vs passthrough
+      #   harmonized : present AND target >= min.prop
+      #   passthrough: present AND target < min.prop  (includes target == 0)
+      types_harmonized  <- types_present[tp[types_present] >= min.prop]
+      types_passthrough <- types_present[tp[types_present] <  min.prop]
+
+      if (length(types_harmonized) == 0) {
+        # Nothing to harmonize — keep everything
         retained_cells <- c(retained_cells, cells_cb)
         if (verbose) {
           message("\nCondition '", cond, "', Batch '", b,
-                  "': all types have zero target, keeping all ", length(cells_cb), " cells.")
+                  "': no harmonized types, keeping all ", length(cells_cb), " cells.")
         }
         next
       }
 
-      # Bottleneck: minimum ratio of actual count to target proportion
-      ratios <- as.numeric(N[types_with_target]) / tp[types_with_target]
-      total_keep <- floor(min(ratios))
+      # Renormalize target proportions so harmonized types sum to 1
+      tp_h <- tp[types_harmonized]
+      tp_h <- tp_h / sum(tp_h)
+
+      # Single-pass capping: cap each type at its ideal count
+      # (proportion × total of harmonized types), keep all if under-represented
+      total_h <- sum(N[types_harmonized])
 
       n_keep <- setNames(rep(0L, length(celltypes)), celltypes)
-      for (ct in types_with_target) {
-        n_keep[ct] <- floor(total_keep * tp[ct])
+      for (ct in types_harmonized) {
+        n_keep[ct] <- min(as.integer(N[ct]), floor(total_h * tp_h[ct]))
       }
-      # Edge case: types with zero target — keep ALL their cells
-      for (ct in types_zero_target) {
+      # Passthrough types: keep all their cells
+      for (ct in types_passthrough) {
         n_keep[ct] <- as.integer(N[ct])
       }
 
       if (verbose) {
         orig_total <- length(cells_cb)
         kept_total <- sum(n_keep)
+        n_pass     <- sum(N[types_passthrough])
         message("\nCondition '", cond, "', Batch '", b,
-                "': keeping ", kept_total, " / ", orig_total, " cells")
+                "': keeping ", kept_total, " / ", orig_total, " cells",
+                " (", length(types_passthrough), " rare types pass through, ",
+                n_pass, " cells)")
         message("  Per-type keep: ",
                 paste(celltypes, "=", n_keep, "/", as.integer(N), collapse = ", "))
       }

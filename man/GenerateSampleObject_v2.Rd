@@ -10,6 +10,7 @@ GenerateSampleObject_v2(
   condition_key,
   group.by = "ident",
   cell_type_key,
+  min.prop = 0.001,
   seed = 42,
   verbose = TRUE,
   nn.name = NULL,
@@ -39,6 +40,11 @@ replicate / sequencing run)}
 Default is \code{"ident"}.}
 
 \item{cell_type_key}{Metadata column identifying the cell-type annotation}
+
+\item{min.prop}{Minimum target proportion threshold. Cell types whose
+median (target) proportion is below this value are excluded from
+harmonization and all their cells are kept as-is. Set to 0 to
+harmonize every cell type. Default is 0.001.}
 
 \item{seed}{Random seed for reproducible downsampling. Default is 42.}
 
@@ -78,8 +84,10 @@ object or matrix), built from the harmonized subset of cells.
 Wraps \code{\link{GenerateSampleObject}} with a pre-processing step that
 downsamples cells so that cell-type proportions are harmonized across batches
 within each condition. For each condition, the target proportion for each cell
-type is the median across batches. A bottleneck-based downsampling is then
-applied per (condition, batch) to match those target proportions as closely as
-possible.
+type is the median across batches. Over-represented cell types (those whose
+actual proportion exceeds the target) are trimmed down, while
+under-represented types keep all their cells. Cell types whose target
+proportion falls below \code{min.prop} are excluded from harmonization
+entirely and pass through unchanged.
 }
 \concept{scSLIDE}
