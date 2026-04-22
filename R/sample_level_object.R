@@ -585,40 +585,102 @@ GenerateSampleObject_v2 <- function(
   }
 
   # ------------------------------------------------------------------
-  # Step 3 — Median target proportions per condition
+  # Step 3 — OPTIMAL target proportions per condition (Strategy 2)
+  #
+  # Strategy: Instead of using the median, we use Nelder-Mead optimization 
+  # to find the exact target proportion vector that mathematically maximizes 
+  # the total retained cells across all batches in the condition.
   # ------------------------------------------------------------------
-  # For each condition, compute proportion matrix (batches × celltypes),
-  # then take the column-wise median.
   target_props <- list()
+  
   for (cond in conditions) {
-    # subset to batches that actually contain cells for this condition
-    cond_batches <- batches[sapply(batches, function(b) sum(count_tab[cond, b, celltypes]) > 0)]
-    prop_mat <- matrix(0, nrow = length(cond_batches), ncol = length(celltypes),
-                       dimnames = list(cond_batches, celltypes))
-    for (b in cond_batches) {
-      ct_counts <- count_tab[cond, b, celltypes]
-      total <- sum(ct_counts)
-      if (total > 0) {
-        prop_mat[b, ] <- ct_counts / total
-      }
-    }
-    target_props[[cond]] <- apply(prop_mat, 2, stats::median)
-
-    if (verbose) {
-      message("\n--- Condition: ", cond, " ---")
-      message("  Batches with cells: ", paste(cond_batches, collapse = ", "))
+      # Subset to batches that actually contain cells for this condition
+      cond_batches <- batches[sapply(batches, function(b) sum(count_tab[cond, b, celltypes]) > 0)]
+      
+      # Build count matrix for this condition (Batches x Celltypes)
+      c_mat <- matrix(0, nrow = length(cond_batches), ncol = length(celltypes),
+                      dimnames = list(cond_batches, celltypes))
       for (b in cond_batches) {
-        message("  Batch '", b, "' counts : ",
-                paste(celltypes, "=", count_tab[cond, b, celltypes], collapse = ", "),
-                " (total=", sum(count_tab[cond, b, celltypes]), ")")
-        message("  Batch '", b, "' props  : ",
-                paste(celltypes, "=", round(prop_mat[b, ], 4), collapse = ", "))
+          c_mat[b, ] <- count_tab[cond, b, celltypes]
       }
-      message("  Target proportions  : ",
-              paste(celltypes, "=", round(target_props[[cond]], 4), collapse = ", "))
-    }
+      
+      # If only one batch, the optimal proportion is just its own proportion
+      if (length(cond_batches) <= 1) {
+          if (sum(c_mat) > 0) {
+              target_props[[cond]] <- c_mat[1, ] / sum(c_mat[1, ])
+          } else {
+              target_props[[cond]] <- setNames(rep(1/length(celltypes), length(celltypes)), celltypes)
+          }
+      } else {
+          # Filter to cell types that actually exist in this condition
+          types_present <- celltypes[colSums(c_mat) > 0]
+          c_mat_sub <- c_mat[, types_present, drop = FALSE]
+          
+          if (length(types_present) <= 1) {
+              # Edge case: only one cell type exists in this condition
+              final_p <- setNames(rep(0, length(celltypes)), celltypes)
+              final_p[types_present] <- 1
+              target_props[[cond]] <- final_p
+          } else {
+              # --- Objective Function for Optimizer ---
+              # We want to MINIMIZE the negative total retained cells.
+              eval_f <- function(x) {
+                  # Use softmax to ensure proportions always sum to 1 and are > 0
+                  p <- exp(x) / sum(exp(x))
+                  names(p) <- types_present
+                  
+                  total_kept <- 0
+                  for (i in 1:nrow(c_mat_sub)) {
+                      batch_counts <- c_mat_sub[i, ]
+                      b_types <- types_present[batch_counts > 0]
+                      
+                      if (length(b_types) > 0) {
+                          # Mirror Step 4: Renormalize proportions for types present in this specific batch
+                          p_b <- p[b_types]
+                          p_b <- p_b / sum(p_b) 
+                          
+                          # Calculate the bottleneck ratio (N / tp)
+                          ratios <- batch_counts[b_types] / p_b
+                          total_kept <- total_kept + min(ratios)
+                      }
+                  }
+                  return(-total_kept) # Return negative because optim() minimizes by default
+              }
+              
+              # Calculate median proportions to give the optimizer a strong starting guess
+              prop_mat_sub <- t(apply(c_mat_sub, 1, function(row) row / sum(row)))
+              start_p <- apply(prop_mat_sub, 2, stats::median)
+              start_p <- start_p / sum(start_p)
+              
+              # Transform starting guess to unconstrained space (log)
+              start_x <- log(start_p + 1e-9)
+              
+              # Run Nelder-Mead optimization
+              opt_res <- optim(par = start_x, fn = eval_f, method = "Nelder-Mead")
+              
+              # Convert optimized parameters back to standard proportions
+              best_p <- exp(opt_res$par) / sum(exp(opt_res$par))
+              
+              # Map back to the full cell types vector
+              final_p <- setNames(rep(0, length(celltypes)), celltypes)
+              final_p[types_present] <- best_p
+              target_props[[cond]] <- final_p
+          }
+      }
+      
+      if (verbose) {
+          message("\n--- Condition: ", cond, " ---")
+          message("  Batches with cells: ", paste(cond_batches, collapse = ", "))
+          for (b in cond_batches) {
+              message("  Batch '", b, "' original counts: ",
+                      paste(celltypes, "=", count_tab[cond, b, celltypes], collapse = ", "),
+                      " (total=", sum(count_tab[cond, b, celltypes]), ")")
+          }
+          message("  OPTIMIZED target proportions: ",
+                  paste(celltypes, "=", round(target_props[[cond]], 4), collapse = ", "))
+      }
   }
-
+  
   # ------------------------------------------------------------------
   # Step 4 & 5 — Downsample and collect retained cells
   #
