@@ -288,6 +288,10 @@ PrepareSampleObject <- function(
 #' @param remove.sketch.cell.from.col if TRUE, the function will detect if the columns of the NN object and remove the cells that
 #'  have been used as the landmark cells.
 #' @param new_assay_name Name for the new assay containing landmark counts
+#' @param cells.use An optional character vector of cell names to subset before building
+#'   the sample-level matrix. When non-NULL, only cells in this vector (that are also present
+#'   in the NN object) are retained. This is used by \code{\link{GenerateSampleObject_v2}} for
+#'   cell-type proportion harmonization. Default is NULL (use all cells).
 #' @param verbose Print progress and diagnostic messages
 #' @param ... Arguments to be passed to methods such as \code{\link{CreateSeuratObject}}
 #'
@@ -312,6 +316,7 @@ GenerateSampleObject <- function(
     rename.group.by = NULL,
     add.meta.data = TRUE,
     remove.sketch.cell.from.col = TRUE,
+    cells.use = NULL,
     verbose = TRUE,
     ...
 ) {
@@ -359,6 +364,14 @@ GenerateSampleObject <- function(
                              x = 1)
   rownames(raw_ct_mat) <- colnames(object[[sketch.assay]])
   colnames(raw_ct_mat) <- object[[nn.name]]@cell.names
+
+  # optionally subset to user-specified cells
+  if (!is.null(cells.use)) {
+    keep <- which(colnames(raw_ct_mat) %in% cells.use)
+    if (length(keep) == 0) stop("None of the cells in 'cells.use' found in the NN object.")
+    raw_ct_mat <- raw_ct_mat[, keep]
+    if (verbose) message("Subsetting to ", length(keep), " cells from 'cells.use'.")
+  }
 
   # an extra step to remove the cells that have been used as landmarks
   if (isTRUE(x = remove.sketch.cell.from.col)){
@@ -440,4 +453,259 @@ GenerateSampleObject <- function(
   }
   #
   return(landmark_obj)
+}
+
+
+#' Generate a sample-level count matrix with cell-type proportion harmonization across batches
+#'
+#' Wraps \code{\link{GenerateSampleObject}} with a pre-processing step that
+#' downsamples cells so that cell-type proportions are harmonized across batches
+#' within each condition. For each condition, the target proportion for each cell
+#' type is the median across batches. A bottleneck-based downsampling is then
+#' applied per (condition, batch) to match those target proportions as closely as
+#' possible.
+#'
+#' @param object Seurat object (must already contain a Neighbor object, e.g.
+#'   from \code{\link{PrepareSampleObject}})
+#' @param integrate_key Metadata column identifying the batch (technical
+#'   replicate / sequencing run)
+#' @param condition_key Metadata column identifying the biological condition
+#'   (e.g. disease vs. control)
+#' @param group.by Metadata column identifying sample identity (e.g. donor).
+#'   Default is \code{"ident"}.
+#' @param cell_type_key Metadata column identifying the cell-type annotation
+#' @param seed Random seed for reproducible downsampling. Default is 42.
+#' @param verbose Print progress and diagnostic messages. Default is TRUE.
+#' @param nn.name Name of the Neighbor object. If NULL, inferred from the
+#'   Seurat object.
+#' @param k.nn Number of nearest neighbours used for aggregation. Default is 5.
+#' @param sketch.assay Name of the sketch assay. Default is \code{"LANDMARK"}.
+#' @param return.seurat Whether to return a Seurat object. Default is TRUE.
+#' @param new_assay_name Name for the new assay. Default is \code{"LMC"}.
+#' @param normalization.method Normalization method. Default is
+#'   \code{"ChiSquared"}.
+#' @param scale.factor Scale factor for Log-Normalization. Default is 10 000.
+#' @param rename.group.by Metadata column used to rename landmark rows.
+#' @param add.meta.data Attach sample-level metadata. Default is TRUE.
+#' @param remove.sketch.cell.from.col Remove landmark cells from columns.
+#'   Default is TRUE.
+#' @param ... Additional arguments passed to
+#'   \code{\link{GenerateSampleObject}}.
+#'
+#' @return The return value of \code{\link{GenerateSampleObject}} (a Seurat
+#'   object or matrix), built from the harmonized subset of cells.
+#'
+#' @export
+#' @concept scSLIDE
+#'
+#' @importFrom SeuratObject FetchData Cells
+#'
+GenerateSampleObject_v2 <- function(
+    object,
+    integrate_key,
+    condition_key,
+    group.by = "ident",
+    cell_type_key,
+    seed = 42,
+    verbose = TRUE,
+    # --- forwarded to GenerateSampleObject ---
+    nn.name = NULL,
+    k.nn = 5,
+    sketch.assay = "LANDMARK",
+    return.seurat = TRUE,
+    new_assay_name = "LMC",
+    normalization.method = "ChiSquared",
+    scale.factor = 10000,
+    rename.group.by = NULL,
+    add.meta.data = TRUE,
+    remove.sketch.cell.from.col = TRUE,
+    ...
+) {
+  # ------------------------------------------------------------------
+  # Step 1 — Validate inputs
+  # ------------------------------------------------------------------
+  required_keys <- c(integrate_key, condition_key, cell_type_key)
+  missing_keys <- setdiff(required_keys, colnames(object@meta.data))
+  if (length(missing_keys) > 0) {
+    stop("The following metadata columns were not found: ",
+         paste(missing_keys, collapse = ", "))
+  }
+
+  # Resolve the nn.name (same default logic as GenerateSampleObject)
+  if (is.null(nn.name)) {
+    nn.name <- names(object@neighbors)[1]
+    if (is.null(nn.name)) stop("No Neighbor object found in the Seurat object.")
+  }
+  if (!nn.name %in% names(object@neighbors)) {
+    stop("Neighbor object '", nn.name, "' not found in the Seurat object.")
+  }
+
+  # Get the cells that are in the NN object
+  nn_cells <- Cells(object[[nn.name]])
+  meta <- object@meta.data[nn_cells, , drop = FALSE]
+
+  batch_vec     <- meta[[integrate_key]]
+  condition_vec <- meta[[condition_key]]
+  celltype_vec  <- meta[[cell_type_key]]
+
+  # ------------------------------------------------------------------
+  # Step 2 — Per-(condition, batch) cell-type proportions
+  # ------------------------------------------------------------------
+  conditions <- unique(condition_vec)
+  batches    <- unique(batch_vec)
+  celltypes  <- unique(celltype_vec)
+
+  # Build a 3-way count table: condition × batch × celltype
+  count_tab <- table(condition = condition_vec,
+                     batch     = batch_vec,
+                     celltype  = celltype_vec)
+
+  if (verbose) {
+    message("=== Cell-type proportion harmonization ===")
+    message("Conditions : ", paste(conditions, collapse = ", "))
+    message("Batches    : ", paste(batches, collapse = ", "))
+    message("Cell types : ", paste(celltypes, collapse = ", "))
+  }
+
+  # ------------------------------------------------------------------
+  # Step 3 — Median target proportions per condition
+  # ------------------------------------------------------------------
+  # For each condition, compute proportion matrix (batches × celltypes),
+  # then take the column-wise median.
+  target_props <- list()
+  for (cond in conditions) {
+    # subset to batches that actually contain cells for this condition
+    cond_batches <- batches[sapply(batches, function(b) sum(count_tab[cond, b, ]) > 0)]
+    prop_mat <- matrix(0, nrow = length(cond_batches), ncol = length(celltypes),
+                       dimnames = list(cond_batches, celltypes))
+    for (b in cond_batches) {
+      total <- sum(count_tab[cond, b, ])
+      if (total > 0) {
+        prop_mat[b, ] <- count_tab[cond, b, ] / total
+      }
+    }
+    target_props[[cond]] <- apply(prop_mat, 2, stats::median)
+
+    if (verbose) {
+      message("\n--- Condition: ", cond, " ---")
+      message("  Batches with cells: ", paste(cond_batches, collapse = ", "))
+      for (b in cond_batches) {
+        message("  Batch '", b, "' counts : ",
+                paste(celltypes, "=", count_tab[cond, b, ], collapse = ", "),
+                " (total=", sum(count_tab[cond, b, ]), ")")
+        message("  Batch '", b, "' props  : ",
+                paste(celltypes, "=", round(prop_mat[b, ], 4), collapse = ", "))
+      }
+      message("  Target proportions  : ",
+              paste(celltypes, "=", round(target_props[[cond]], 4), collapse = ", "))
+    }
+  }
+
+  # ------------------------------------------------------------------
+  # Step 4 & 5 — Downsample and collect retained cells
+  # ------------------------------------------------------------------
+  set.seed(seed)
+  retained_cells <- character(0)
+
+  for (cond in conditions) {
+    cond_batches <- batches[sapply(batches, function(b) sum(count_tab[cond, b, ]) > 0)]
+
+    # If only one batch for this condition, no harmonization needed
+    if (length(cond_batches) <= 1) {
+      idx <- which(condition_vec == cond & batch_vec %in% cond_batches)
+      retained_cells <- c(retained_cells, nn_cells[idx])
+      if (verbose) {
+        message("\nCondition '", cond, "': single batch, keeping all ",
+                length(idx), " cells.")
+      }
+      next
+    }
+
+    tp <- target_props[[cond]]
+
+    for (b in cond_batches) {
+      # Cells in this (condition, batch) group
+      idx <- which(condition_vec == cond & batch_vec == b)
+      cells_cb <- nn_cells[idx]
+      ct_cb    <- celltype_vec[idx]
+
+      N <- table(factor(ct_cb, levels = celltypes))
+
+      # Types present in this batch
+      types_present <- names(N)[N > 0]
+      # Types with nonzero target and present in this batch
+      types_with_target <- types_present[tp[types_present] > 0]
+      # Types with zero target but present (only in this batch, median was 0)
+      types_zero_target <- types_present[tp[types_present] == 0]
+
+      if (length(types_with_target) == 0) {
+        # All present types have zero target — keep everything
+        retained_cells <- c(retained_cells, cells_cb)
+        if (verbose) {
+          message("\nCondition '", cond, "', Batch '", b,
+                  "': all types have zero target, keeping all ", length(cells_cb), " cells.")
+        }
+        next
+      }
+
+      # Bottleneck: minimum ratio of actual count to target proportion
+      ratios <- as.numeric(N[types_with_target]) / tp[types_with_target]
+      total_keep <- floor(min(ratios))
+
+      n_keep <- setNames(rep(0L, length(celltypes)), celltypes)
+      for (ct in types_with_target) {
+        n_keep[ct] <- floor(total_keep * tp[ct])
+      }
+      # Edge case: types with zero target — keep ALL their cells
+      for (ct in types_zero_target) {
+        n_keep[ct] <- as.integer(N[ct])
+      }
+
+      if (verbose) {
+        orig_total <- length(cells_cb)
+        kept_total <- sum(n_keep)
+        message("\nCondition '", cond, "', Batch '", b,
+                "': keeping ", kept_total, " / ", orig_total, " cells")
+        message("  Per-type keep: ",
+                paste(celltypes, "=", n_keep, "/", as.integer(N), collapse = ", "))
+      }
+
+      # Sample cells for each type
+      for (ct in celltypes) {
+        if (n_keep[ct] == 0) next
+        ct_cells <- cells_cb[ct_cb == ct]
+        if (length(ct_cells) <= n_keep[ct]) {
+          retained_cells <- c(retained_cells, ct_cells)
+        } else {
+          retained_cells <- c(retained_cells, sample(ct_cells, n_keep[ct]))
+        }
+      }
+    }
+  }
+
+  if (verbose) {
+    message("\n=== Total cells retained: ", length(retained_cells),
+            " / ", length(nn_cells), " ===\n")
+  }
+
+  # ------------------------------------------------------------------
+  # Step 6 — Call GenerateSampleObject with cells.use
+  # ------------------------------------------------------------------
+  GenerateSampleObject(
+    object     = object,
+    nn.name    = nn.name,
+    k.nn       = k.nn,
+    sketch.assay = sketch.assay,
+    return.seurat = return.seurat,
+    new_assay_name = new_assay_name,
+    group.by   = group.by,
+    normalization.method = normalization.method,
+    scale.factor = scale.factor,
+    rename.group.by = rename.group.by,
+    add.meta.data = add.meta.data,
+    remove.sketch.cell.from.col = remove.sketch.cell.from.col,
+    cells.use  = retained_cells,
+    verbose    = verbose,
+    ...
+  )
 }

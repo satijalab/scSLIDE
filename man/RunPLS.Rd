@@ -44,6 +44,7 @@ RunPLS(object, ...)
   seed.use = 42,
   eta = 0.5,
   save.model = FALSE,
+  threads = 1L,
   ...
 )
 
@@ -63,6 +64,7 @@ RunPLS(object, ...)
   seed.use = 42,
   eta = 0.5,
   save.model = FALSE,
+  threads = 1L,
   ...
 )
 
@@ -83,6 +85,7 @@ RunPLS(object, ...)
   seed.use = 42,
   eta = 0.5,
   save.model = FALSE,
+  threads = 1L,
   ...
 )
 
@@ -102,6 +105,7 @@ RunPLS(object, ...)
   seed.use = 42,
   eta = 0.5,
   save.model = FALSE,
+  threads = 1L,
   ...
 )
 }
@@ -149,6 +153,11 @@ the number for the dimension names.}
 \item{eta}{Thresholding parameter that controls the sparsity of the spls method (larger --> sparser). eta should be between 0 and 1.}
 
 \item{save.model}{Logical; if TRUE, save model components (coefficients, Xmeans, Ymeans, feature.mean, feature.sd) into the misc slot for later prediction. The per-gene \code{feature.mean} and \code{feature.sd} are computed from the training \code{data} layer so that \code{PredictPLS} can scale new data into the same coordinate system. Default FALSE.}
+
+\item{threads}{Integer; number of threads for BPCells parallel computation
+(IterableMatrix path only). \code{1} (default) = single-threaded;
+\code{0} = auto-detect via \code{parallel::detectCores(logical = FALSE)};
+values \eqn{\ge 2} use that many threads. Ignored for in-memory data.}
 
 \item{features}{Features to compute PLS on}
 
