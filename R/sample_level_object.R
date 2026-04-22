@@ -385,9 +385,16 @@ GenerateSampleObject <- function(
   landmark_ct_mat <- matrix(nrow = nrow(raw_ct_mat),
                             ncol = ncol(category.matrix))
   i <- 1
+  valid_cols <- colnames(raw_ct_mat)
   for(SAMPLE_ID in colnames(category.matrix)){
     cell_idx <- rownames(category.matrix)[which(category.matrix[, SAMPLE_ID] == 1)]
     cell_idx <- cell_idx[! cell_idx %in% rownames(raw_ct_mat)]
+    cell_idx <- cell_idx[cell_idx %in% valid_cols]
+    if (length(cell_idx) == 0) {
+      landmark_ct_mat[, i] <- 0
+      i <- i + 1
+      next
+    }
     landmark_ct_mat[, i] <- SeuratObject::rowSums(raw_ct_mat[, cell_idx])
     i <- i + 1
   }
@@ -556,6 +563,8 @@ GenerateSampleObject_v2 <- function(
   celltypes  <- unique(celltype_vec)
 
   # Build a 3-way count table: condition × batch × celltype
+  # Note: table() alphabetizes dimension names, so always use named indexing
+  # with [cond, b, celltypes] to retrieve values in our desired order.
   count_tab <- table(condition = condition_vec,
                      batch     = batch_vec,
                      celltype  = celltype_vec)
@@ -575,13 +584,14 @@ GenerateSampleObject_v2 <- function(
   target_props <- list()
   for (cond in conditions) {
     # subset to batches that actually contain cells for this condition
-    cond_batches <- batches[sapply(batches, function(b) sum(count_tab[cond, b, ]) > 0)]
+    cond_batches <- batches[sapply(batches, function(b) sum(count_tab[cond, b, celltypes]) > 0)]
     prop_mat <- matrix(0, nrow = length(cond_batches), ncol = length(celltypes),
                        dimnames = list(cond_batches, celltypes))
     for (b in cond_batches) {
-      total <- sum(count_tab[cond, b, ])
+      ct_counts <- count_tab[cond, b, celltypes]
+      total <- sum(ct_counts)
       if (total > 0) {
-        prop_mat[b, ] <- count_tab[cond, b, ] / total
+        prop_mat[b, ] <- ct_counts / total
       }
     }
     target_props[[cond]] <- apply(prop_mat, 2, stats::median)
@@ -591,8 +601,8 @@ GenerateSampleObject_v2 <- function(
       message("  Batches with cells: ", paste(cond_batches, collapse = ", "))
       for (b in cond_batches) {
         message("  Batch '", b, "' counts : ",
-                paste(celltypes, "=", count_tab[cond, b, ], collapse = ", "),
-                " (total=", sum(count_tab[cond, b, ]), ")")
+                paste(celltypes, "=", count_tab[cond, b, celltypes], collapse = ", "),
+                " (total=", sum(count_tab[cond, b, celltypes]), ")")
         message("  Batch '", b, "' props  : ",
                 paste(celltypes, "=", round(prop_mat[b, ], 4), collapse = ", "))
       }
@@ -608,7 +618,7 @@ GenerateSampleObject_v2 <- function(
   retained_cells <- character(0)
 
   for (cond in conditions) {
-    cond_batches <- batches[sapply(batches, function(b) sum(count_tab[cond, b, ]) > 0)]
+    cond_batches <- batches[sapply(batches, function(b) sum(count_tab[cond, b, celltypes]) > 0)]
 
     # If only one batch for this condition, no harmonization needed
     if (length(cond_batches) <= 1) {
