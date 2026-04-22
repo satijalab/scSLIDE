@@ -84,10 +84,11 @@ object or matrix), built from the harmonized subset of cells.
 Wraps \code{\link{GenerateSampleObject}} with a pre-processing step that
 downsamples cells so that cell-type proportions are harmonized across batches
 within each condition. For each condition, the target proportion for each cell
-type is the median across batches. Over-represented cell types (those whose
-actual proportion exceeds the target) are trimmed down, while
-under-represented types keep all their cells. Cell types whose target
-proportion falls below \code{min.prop} are excluded from harmonization
-entirely and pass through unchanged.
+type is the median across batches. A bottleneck-based downsampling is then
+applied per (condition, batch) to match those target proportions exactly.
+Cell types whose target proportion falls below \code{min.prop} are excluded
+from harmonization entirely and pass through unchanged; raising
+\code{min.prop} removes minor cell types from the bottleneck calculation
+and increases overall cell retention.
 }
 \concept{scSLIDE}

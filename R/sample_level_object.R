@@ -468,11 +468,12 @@ GenerateSampleObject <- function(
 #' Wraps \code{\link{GenerateSampleObject}} with a pre-processing step that
 #' downsamples cells so that cell-type proportions are harmonized across batches
 #' within each condition. For each condition, the target proportion for each cell
-#' type is the median across batches. Over-represented cell types (those whose
-#' actual proportion exceeds the target) are trimmed down, while
-#' under-represented types keep all their cells. Cell types whose target
-#' proportion falls below \code{min.prop} are excluded from harmonization
-#' entirely and pass through unchanged.
+#' type is the median across batches. A bottleneck-based downsampling is then
+#' applied per (condition, batch) to match those target proportions exactly.
+#' Cell types whose target proportion falls below \code{min.prop} are excluded
+#' from harmonization entirely and pass through unchanged; raising
+#' \code{min.prop} removes minor cell types from the bottleneck calculation
+#' and increases overall cell retention.
 #'
 #' @param object Seurat object (must already contain a Neighbor object, e.g.
 #'   from \code{\link{PrepareSampleObject}})
@@ -621,15 +622,14 @@ GenerateSampleObject_v2 <- function(
   # ------------------------------------------------------------------
   # Step 4 & 5 — Downsample and collect retained cells
   #
-  # Strategy: single-pass capping.
+  # Strategy: bottleneck with min.prop filtering.
   #   - Cell types with target proportion < min.prop (or == 0) bypass
-
   #     harmonization entirely (all cells kept).
   #   - Among harmonized types, target proportions are renormalized to
-  #     sum to 1. Each type is capped at floor(total_h * tp_renorm),
-  #     where total_h is the original cell count of harmonized types in
-  #     this (condition, batch). Over-represented types are trimmed;
-  #     under-represented types keep all their cells.
+  #     sum to 1. The bottleneck type (min of N[t] / tp_h[t]) determines
+  #     the total cells to keep, and each harmonized type is set to
+  #     floor(total_keep * tp_h[t]).  This guarantees exact proportion
+  #     matching across batches for harmonized types.
   # ------------------------------------------------------------------
   set.seed(seed)
   retained_cells <- character(0)
@@ -681,13 +681,14 @@ GenerateSampleObject_v2 <- function(
       tp_h <- tp[types_harmonized]
       tp_h <- tp_h / sum(tp_h)
 
-      # Single-pass capping: cap each type at its ideal count
-      # (proportion × total of harmonized types), keep all if under-represented
-      total_h <- sum(N[types_harmonized])
+      # Bottleneck: the type with the smallest N[t] / tp_h[t] ratio
+      # determines the total number of harmonized cells to keep
+      ratios <- as.numeric(N[types_harmonized]) / tp_h
+      total_keep <- floor(min(ratios))
 
       n_keep <- setNames(rep(0L, length(celltypes)), celltypes)
       for (ct in types_harmonized) {
-        n_keep[ct] <- min(as.integer(N[ct]), floor(total_h * tp_h[ct]))
+        n_keep[ct] <- floor(total_keep * tp_h[ct])
       }
       # Passthrough types: keep all their cells
       for (ct in types_passthrough) {
@@ -698,10 +699,12 @@ GenerateSampleObject_v2 <- function(
         orig_total <- length(cells_cb)
         kept_total <- sum(n_keep)
         n_pass     <- sum(N[types_passthrough])
+        # Identify the bottleneck type
+        bottleneck_type <- types_harmonized[which.min(ratios)]
         message("\nCondition '", cond, "', Batch '", b,
                 "': keeping ", kept_total, " / ", orig_total, " cells",
                 " (", length(types_passthrough), " rare types pass through, ",
-                n_pass, " cells)")
+                n_pass, " cells; bottleneck: ", bottleneck_type, ")")
         message("  Per-type keep: ",
                 paste(celltypes, "=", n_keep, "/", as.integer(N), collapse = ", "))
       }
