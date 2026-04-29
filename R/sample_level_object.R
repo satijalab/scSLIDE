@@ -459,8 +459,7 @@ GenerateSampleObject <- function(
     landmark_obj <- NormalizeChiSquared(object = landmark_obj, assay = new_assay_name)
   }
   #
-  return(list(landmark_obj = landmark_obj, 
-              cells.use = cells.use))
+  return(landmark_obj)
 }
 
 
