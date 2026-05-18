@@ -14,7 +14,7 @@ CorrectSampleComBat(
   par.prior = TRUE,
   method = c("regression", "subtraction"),
   correct.attenuation = FALSE,
-  floor.beta = 0,
+  floor.beta = NULL,
   verbose = TRUE
 )
 }

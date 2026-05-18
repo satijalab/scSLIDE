@@ -64,7 +64,7 @@ CorrectSampleComBat <- function(object,
                                       par.prior         = TRUE,
                                       method            = c("regression", "subtraction"),
                                       correct.attenuation = FALSE,
-                                      floor.beta        = 0,
+                                      floor.beta        = NULL,
                                       verbose           = TRUE) {
 
   # ---- 1. Input validation + data extraction --------------------------------
@@ -142,7 +142,7 @@ CorrectSampleComBat <- function(object,
   for (b in unique_batches) {
     nb <- n_ctrl[b]
     if (nb >= 2) {
-      Z_batch[, b] <- rowMeans(data_mat[, ctrl_idx_list[[b]]])
+      Z_batch[, b] <- rowMeans(data_mat[, ctrl_idx_list[[b]], drop = FALSE])
     } else if (nb == 1) {
       Z_batch[, b] <- data_mat[, ctrl_idx_list[[b]]]
     }
@@ -435,6 +435,7 @@ CorrectSampleComBat <- function(object,
   return(object)
 }
 
+
 # ==============================================================================
 # Internal ComBat helper functions
 # Adapted from sva::ComBat (Johnson et al. 2007)
@@ -584,7 +585,8 @@ CorrectSampleComBat <- function(object,
 #' @importFrom future.apply future_lapply
 #' @importFrom methods slot slot<- new
 #' @importMethodsFrom BPCells t %*%
-#' @noRd
+#' @export
+#' @concept batch_correction
 cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data", integrate_key = NULL,
                               features = NULL, control_dict = NULL, reduction = NULL, var_cutoff = 0.9, k_max = 1500, k_select = NULL,
                               new.assay.name = "CORRECTED", max_core = 1, future.memory.per.core = 2000,
