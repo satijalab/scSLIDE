@@ -55,8 +55,7 @@ have been used as the landmark cells.}
 
 \item{cells.use}{An optional character vector of cell names to subset before building
 the sample-level matrix. When non-NULL, only cells in this vector (that are also present
-in the NN object) are retained. This is used by \code{\link{GenerateSampleObject_v2}} for
-cell-type proportion harmonization. Default is NULL (use all cells).}
+in the NN object) are retained. Default is NULL (use all cells).}
 
 \item{verbose}{Print progress and diagnostic messages}
 
