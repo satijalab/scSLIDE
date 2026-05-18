@@ -245,12 +245,8 @@ PredictPLS.Seurat <- function(
   p <- dim(coefficients)[1]
 
   # Feature alignment
-  # BPCells default: features x samples (@transpose = FALSE)
-  if (newdata@transpose) {
-    feat.names <- colnames(newdata)
-  } else {
-    feat.names <- rownames(newdata)
-  }
+  # BPCells' rownames()/colnames() already account for @transpose.
+  feat.names <- rownames(newdata)
 
   if (length(model.features) > 0 && !is.null(feat.names)) {
     missing.features <- setdiff(model.features, feat.names)
@@ -261,13 +257,9 @@ PredictPLS.Seurat <- function(
            if (length(missing.features) > 5) ", ..." else "")
     }
     # Subset/reorder lazily
-    if (newdata@transpose) {
-      newdata <- newdata[, model.features]
-    } else {
-      newdata <- newdata[model.features, ]
-    }
+    newdata <- newdata[model.features, ]
   } else {
-    n.feat <- if (newdata@transpose) ncol(newdata) else nrow(newdata)
+    n.feat <- nrow(newdata)
     if (n.feat != p) {
       stop("newdata has ", n.feat,
            " features but model expects ", p, " features")
@@ -278,13 +270,8 @@ PredictPLS.Seurat <- function(
   is_transposed <- !newdata@transpose
 
   # Get sample count and names
-  if (newdata@transpose) {
-    n.samples <- nrow(newdata)
-    sample.names <- rownames(newdata)
-  } else {
-    n.samples <- ncol(newdata)
-    sample.names <- colnames(newdata)
-  }
+  n.samples <- ncol(newdata)
+  sample.names <- colnames(newdata)
 
   # Validate ncomp
   ncomp_max <- dim(coefficients)[3]

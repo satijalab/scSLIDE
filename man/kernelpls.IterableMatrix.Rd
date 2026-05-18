@@ -4,7 +4,7 @@
 \alias{kernelpls.IterableMatrix}
 \title{Kernel Partial Least Squares for IterableMatrix}
 \usage{
-\method{kernelpls}{IterableMatrix}(X, Y, ncomp, center = TRUE, stripped = FALSE, ...)
+\method{kernelpls}{IterableMatrix}(X, Y, ncomp, center = TRUE, stripped = FALSE, threads = 1L, ...)
 }
 \arguments{
 \item{X}{An IterableMatrix (features x samples, the BPCells convention).
@@ -18,6 +18,11 @@ The transpose is handled internally.}
 
 \item{stripped}{Logical; if \code{TRUE} return only coefficients, Xmeans, and
 Ymeans for speed (default \code{FALSE}).}
+
+\item{threads}{Integer; number of threads for BPCells parallel computation.
+\code{1} (default) = single-threaded;
+\code{0} = auto-detect via \code{parallel::detectCores(logical = FALSE)};
+values \eqn{\ge 2} use that many threads.}
 
 \item{...}{Additional arguments (currently unused).}
 }

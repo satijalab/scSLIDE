@@ -265,6 +265,59 @@ test_that("kernel-PLS matches pls package: many components multi-response", {
 })
 
 
+test_that("kernel-PLS multi-threaded results match single-threaded", {
+  skip_if_not_installed("BPCells")
+  skip_if_not_installed("pls")
+
+  set.seed(42)
+  n <- 80
+  p <- 15
+  ncomp <- 5
+
+  X <- matrix(rnorm(n * p), n, p)
+  beta <- rnorm(p)
+  Y <- X %*% beta + rnorm(n, sd = 0.5)
+  Y <- as.matrix(Y)
+
+  X_bp <- to_bp(X)
+  res1 <- kernelpls(X_bp, Y, ncomp = ncomp, threads = 1L)
+  res2 <- kernelpls(X_bp, Y, ncomp = ncomp, threads = 2L)
+
+  expect_equal(res2$coefficients, res1$coefficients, tolerance = 1e-10)
+  expect_equal(res2$scores, res1$scores, tolerance = 1e-10)
+  expect_equal(res2$loadings, res1$loadings, tolerance = 1e-10)
+  expect_equal(res2$fitted.values, res1$fitted.values, tolerance = 1e-10)
+  expect_equal(as.numeric(res2$Xvar), as.numeric(res1$Xvar), tolerance = 1e-10)
+})
+
+
+test_that("kernel-PLS threads = 0 auto-detection runs without error", {
+  skip_if_not_installed("BPCells")
+
+  set.seed(42)
+  n <- 30
+  p <- 8
+
+  X <- matrix(rnorm(n * p), n, p)
+  Y <- matrix(rnorm(n), n, 1)
+  X_bp <- to_bp(X)
+
+  expect_no_error(kernelpls(X_bp, Y, ncomp = 2, threads = 0L))
+})
+
+
+test_that("kernel-PLS threads = -1 is rejected", {
+  skip_if_not_installed("BPCells")
+
+  X <- matrix(rnorm(30), 10, 3)
+  X_bp <- to_bp(X)
+  Y <- matrix(rnorm(10), 10, 1)
+
+  expect_error(kernelpls(X_bp, Y, ncomp = 1, threads = -1L),
+               "threads must be a non-negative integer")
+})
+
+
 test_that("kernel-PLS output dimensions are correct", {
   skip_if_not_installed("BPCells")
 

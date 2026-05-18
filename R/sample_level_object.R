@@ -288,6 +288,9 @@ PrepareSampleObject <- function(
 #' @param remove.sketch.cell.from.col if TRUE, the function will detect if the columns of the NN object and remove the cells that
 #'  have been used as the landmark cells.
 #' @param new_assay_name Name for the new assay containing landmark counts
+#' @param cells.use An optional character vector of cell names to subset before building
+#'   the sample-level matrix. When non-NULL, only cells in this vector (that are also present
+#'   in the NN object) are retained. Default is NULL (use all cells).
 #' @param verbose Print progress and diagnostic messages
 #' @param ... Arguments to be passed to methods such as \code{\link{CreateSeuratObject}}
 #'
@@ -312,6 +315,7 @@ GenerateSampleObject <- function(
     rename.group.by = NULL,
     add.meta.data = TRUE,
     remove.sketch.cell.from.col = TRUE,
+    cells.use = NULL,
     verbose = TRUE,
     ...
 ) {
@@ -360,6 +364,14 @@ GenerateSampleObject <- function(
   rownames(raw_ct_mat) <- colnames(object[[sketch.assay]])
   colnames(raw_ct_mat) <- object[[nn.name]]@cell.names
 
+  # optionally subset to user-specified cells
+  if (!is.null(cells.use)) {
+    keep <- which(colnames(raw_ct_mat) %in% cells.use)
+    if (length(keep) == 0) stop("None of the cells in 'cells.use' found in the NN object.")
+    raw_ct_mat <- raw_ct_mat[, keep]
+    if (verbose) message("Subsetting to ", length(keep), " cells from 'cells.use'.")
+  }
+
   # an extra step to remove the cells that have been used as landmarks
   if (isTRUE(x = remove.sketch.cell.from.col)){
     rm_col <- which(colnames(raw_ct_mat) %in% rownames(raw_ct_mat))
@@ -372,9 +384,16 @@ GenerateSampleObject <- function(
   landmark_ct_mat <- matrix(nrow = nrow(raw_ct_mat),
                             ncol = ncol(category.matrix))
   i <- 1
+  valid_cols <- colnames(raw_ct_mat)
   for(SAMPLE_ID in colnames(category.matrix)){
     cell_idx <- rownames(category.matrix)[which(category.matrix[, SAMPLE_ID] == 1)]
     cell_idx <- cell_idx[! cell_idx %in% rownames(raw_ct_mat)]
+    cell_idx <- cell_idx[cell_idx %in% valid_cols]
+    if (length(cell_idx) == 0) {
+      landmark_ct_mat[, i] <- 0
+      i <- i + 1
+      next
+    }
     landmark_ct_mat[, i] <- SeuratObject::rowSums(raw_ct_mat[, cell_idx])
     i <- i + 1
   }
@@ -441,3 +460,4 @@ GenerateSampleObject <- function(
   #
   return(landmark_obj)
 }
+

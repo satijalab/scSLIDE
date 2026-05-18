@@ -44,6 +44,7 @@ RunPLS(object, ...)
   seed.use = 42,
   eta = 0.5,
   save.model = FALSE,
+  threads = 1L,
   ...
 )
 
@@ -63,6 +64,7 @@ RunPLS(object, ...)
   seed.use = 42,
   eta = 0.5,
   save.model = FALSE,
+  threads = 1L,
   ...
 )
 
@@ -83,6 +85,7 @@ RunPLS(object, ...)
   seed.use = 42,
   eta = 0.5,
   save.model = FALSE,
+  threads = 1L,
   ...
 )
 
@@ -102,6 +105,7 @@ RunPLS(object, ...)
   seed.use = 42,
   eta = 0.5,
   save.model = FALSE,
+  threads = 1L,
   ...
 )
 }
@@ -114,10 +118,21 @@ RunPLS(object, ...)
 
 \item{ncomp}{Number of components to compute}
 
-\item{Y}{a vector or matrix of responses, i.e., the dependent variable that PLS regresses X on. The length / number of rows should be the same as the number of cells.
-Y can have multiple columns.}
+\item{Y}{The response variable(s) for PLS regression.
+Accepted formats:
+\itemize{
+\item A character vector of column names in the Seurat object metadata
+(Seurat method only).
+\item A \code{data.frame}, which is converted via
+\code{model.matrix(~. + 0, data = Y)}.
+\item A numeric matrix (used as-is).
+\item A numeric vector (promoted to a single-column matrix).
+}
+The number of rows must match the number of cells/samples.}
 
-\item{Y.add}{a vector or matrix of additional responses containing relevant information about the observations. Only used for cppls.}
+\item{Y.add}{Additional response variable(s) containing relevant
+information about the observations. Only used for cppls. Accepts the same
+formats as \code{Y}.}
 
 \item{pls.function}{PLS function from pls package to run (options: plsr, spls, cppls)}
 
@@ -139,6 +154,11 @@ the number for the dimension names.}
 
 \item{save.model}{Logical; if TRUE, save model components (coefficients, Xmeans, Ymeans, feature.mean, feature.sd) into the misc slot for later prediction. The per-gene \code{feature.mean} and \code{feature.sd} are computed from the training \code{data} layer so that \code{PredictPLS} can scale new data into the same coordinate system. Default FALSE.}
 
+\item{threads}{Integer; number of threads for BPCells parallel computation
+(IterableMatrix path only). \code{1} (default) = single-threaded;
+\code{0} = auto-detect via \code{parallel::detectCores(logical = FALSE)};
+values \eqn{\ge 2} use that many threads. Ignored for in-memory data.}
+
 \item{features}{Features to compute PLS on}
 
 \item{layer}{The layer in \code{assay} to use when running PLS analysis.}
@@ -152,8 +172,12 @@ This function provides methods for plsr, spls, and cppls from the pls and spls p
 }
 \examples{
 \dontrun{
-# Run PLS on a Seurat object
+# Run PLS on a Seurat object using metadata column names
 seurat_obj <- RunPLS(seurat_obj, Y = "condition", ncomp = 10)
+
+# Run PLS with a pre-built numeric design matrix
+design_mat <- model.matrix(~ age + sex, data = seurat_obj[[]])
+seurat_obj <- RunPLS(seurat_obj, Y = design_mat, ncomp = 10)
 }
 
 }

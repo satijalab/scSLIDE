@@ -31,12 +31,14 @@ Imports:
     RSpectra,
     irlba,
     future,
-    Rcpp
+    future.apply,
+    Rcpp,
+    BPCells,
+    matrixStats
 LinkingTo:
     Rcpp,
     RcppEigen
 Suggests:
-    BPCells,
     knn.covertree,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

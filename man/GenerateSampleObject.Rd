@@ -17,6 +17,7 @@ GenerateSampleObject(
   rename.group.by = NULL,
   add.meta.data = TRUE,
   remove.sketch.cell.from.col = TRUE,
+  cells.use = NULL,
   verbose = TRUE,
   ...
 )
@@ -51,6 +52,10 @@ to the sample-level object; if FALSE, it will not do so.}
 
 \item{remove.sketch.cell.from.col}{if TRUE, the function will detect if the columns of the NN object and remove the cells that
 have been used as the landmark cells.}
+
+\item{cells.use}{An optional character vector of cell names to subset before building
+the sample-level matrix. When non-NULL, only cells in this vector (that are also present
+in the NN object) are retained. Default is NULL (use all cells).}
 
 \item{verbose}{Print progress and diagnostic messages}
 
