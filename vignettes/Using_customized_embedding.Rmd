@@ -1,8 +1,10 @@
 ---
 title: "Generate sample-level density matrix using custom embeddings"
-author: "Longda Jiang"
-date: "2026-01-28"
-output: html_document
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using_customized_embedding}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 ---
 
 By default, scSLIDE uses WNN embedding to create the sample-level density matrix. However, you can use your own custom embedding instead. For example, you might want to build the sample-level matrix using a harmony-corrected PCA space from your single-cell data. Below is a general workflow. Note that we skip the steps for creating the custom embedding, since this varies depending on the method you choose.
