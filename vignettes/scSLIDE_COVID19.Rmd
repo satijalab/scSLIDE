@@ -22,18 +22,23 @@ knitr::opts_chunk$set(
   comment = "#>"
 )
 
-library(SeuratObject)
-devtools::load_all("/Users/uqljian5/Documents/github_repo/seurat")
-library(scSLIDE, lib = "~/Documents/test")
-library(AzimuthAPI)
-library(princurve)
-library(ggplot2)
-library(ggridges)
-library(Scillus)
+library(SeuratObject, lib = "/home/jiangl/R")
+library(Seurat, lib = "/home/jiangl/R")
+library(scSLIDE, lib = "/home/jiangl/R")
+library(AzimuthAPI, lib = "/home/jiangl/R")
+library(princurve, lib = "/home/jiangl/R")
+library(ggplot2, lib = "/home/jiangl/R")
+library(ggridges, lib = "/home/jiangl/R")
+library(Scillus, lib = "/home/jiangl/R")
+library(future, lib = "/home/jiangl/R")
+library(knn.covertree, lib = "/home/jiangl/R")
+library(destiny, lib = "/home/jiangl/R")
+library(BPCells, lib = "/home/jiangl/R")
+
 
 options(future.globals.maxSize = 5 * 1000 * 1024^2)
 
-object <- readRDS("~/Desktop/Lab_stuffs_NYGC/Pop_integration/Rfunction_2025July/scSLIDE_testing_Nov07/Raw_count_Subset_104k_Ahern_2022_Cell.rds")
+object <- readRDS("/brahms/jiangl/scSLIDE_vignette/dependencies/Raw_count_Subset_104k_Ahern_2022_Cell.rds")
 
 ```
 
@@ -271,7 +276,7 @@ print(p1 + p2)
 
 ### Principal Curve Fitting
 
-If you want to explore if multiple DCs and be merged together, we can also fit a principal curve to the top few DCs to obtain a joint pseudo-trajectory line. Here we are fitting such curve for the top 2 DCs, and append it to the object.
+If you want to explore if multiple DCs can be merged together, we can also fit a principal curve to the top few DCs to obtain a joint pseudo-trajectory line. Here we are fitting such curve for the top 2 DCs, and append it to the object.
 
 ```{r message = FALSE, results = 'hide', warning = FALSE, fig.width=8, fig.height=6}
 princurve_res = princurve::principal_curve(sample_obj[['DiffMap']]@cell.embeddings[, 1:2],
@@ -304,7 +309,7 @@ rownames(mdata) = paste0(gsub(pattern = "_", replacement = "-", mdata$Donor),
 bulk_obj = AddMetaData(bulk_obj, metadata  = mdata)
 
 bulk_obj$nCount_RNA = colSums(x = bulk_obj, slot = "counts")  # nCount_RNA
-bulk_obj$nFeature_RNA = colSums(x = LayerData(object = bulk_obj, layer = "counts") > 0)  # nFeatureRNA
+bulk_obj$nFeature_RNA = colSums(x = LayerData(object = bulk_obj, layer = "counts") > 0)  # nFeature_RNA
 ```
 
 ### DE Analysis for CD14 Monocytes

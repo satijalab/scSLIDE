@@ -9,7 +9,7 @@ vignette: >
 
 ## Introduction
 
-This vignette will illustrate how to utilize the [BPCells](https://satijalab.org/seurat/articles/seurat5_bpcells_interaction_vignette) (developed by [Benjamin Parks](https://github.com/bnprks/BPCells)) functionality in Seurat to apply scSLIDE to large-scale single-cell data. We will also utilize [future R-package](https://cran.r-project.org/web/packages/future/index.html)'s parallelization to improve the runtime.We will be using a publicly available [Alzheimer's disease snRNA-seq dataset from the Allen Brain Institute](https://www.nature.com/articles/s41593-024-01774-5) for demonstration.
+This vignette will illustrate how to utilize the [BPCells](https://satijalab.org/seurat/articles/seurat5_bpcells_interaction_vignette) (developed by [Benjamin Parks](https://github.com/bnprks/BPCells)) functionality in Seurat to apply scSLIDE to large-scale single-cell data. We will also utilize [future R-package](https://cran.r-project.org/web/packages/future/index.html)'s parallelization to improve the runtime. We will be using a publicly available [Alzheimer's disease snRNA-seq dataset from the Allen Brain Institute](https://www.nature.com/articles/s41593-024-01774-5) for demonstration.
 
 
 ## Setup and Library Loading
@@ -72,9 +72,9 @@ DATA_NAME = "SEA_AD_atlas_MTG"
 
 ## Generating on-disk Seurat object from .h5ad file
 
-We will use the SEA-AD snRNA-seq data (~1.4m cells) from [Gabitto et al 2024 Nat. Neurosci.](https://www.nature.com/articles/s41593-024-01774-5) as an example for our workflow. This dataset can be downloaded from [CZI Cellxgene data portal ](https://cellxgene.cziscience.com/collections/1ca90a2d-2943-483d-b678-b809bf464c30). The are several datasets available at this link, and we will be using the data collected from patients' MTG (middle temporal gyrus) region.  
+We will use the SEA-AD snRNA-seq data (~1.4m cells) from [Gabitto et al 2024 Nat. Neurosci.](https://www.nature.com/articles/s41593-024-01774-5) as an example for our workflow. This dataset can be downloaded from [CZI Cellxgene data portal ](https://cellxgene.cziscience.com/collections/1ca90a2d-2943-483d-b678-b809bf464c30). There are several datasets available at this link, and we will be using the data collected from patients' MTG (middle temporal gyrus) region.  
 \
-The original file is in .h5ad [AnnData](https://anndata.readthedocs.io/en/stable/) format. Users can load the whole data into R using packages like the [anndata R-package](https://cran.r-project.org/web/packages/anndata/readme/README.html), but this is often not memory-efficinet enough. Below, we will show you how to generate an on-disk Seurat object based on the .h5ad file, and apply our scSLIDE to this on-dick data in our following analyses.  
+The original file is in .h5ad [AnnData](https://anndata.readthedocs.io/en/stable/) format. Users can load the whole data into R using packages like the [anndata R-package](https://cran.r-project.org/web/packages/anndata/readme/README.html), but this is often not memory-efficient enough. Below, we will show you how to generate an on-disk Seurat object based on the .h5ad file, and apply our scSLIDE to this on-disk data in our following analyses.  
 \
 Note that before proceeding to the following workflow, if you want to annotate your single-cell .h5ad file with our Pan-Human Azimuth python tool, you can follow the simple instruction [provided here](https://satijalab.org/pan_human_azimuth/). 
 
@@ -273,7 +273,7 @@ DimPlot(sample_obj, reduction = "DiffMap", group.by = "Disease")  +
 ```
 
 
-The following plots show that the principal curve is related to the neuropathological continuous pseudo-progression score (CPS) provided by the original paper. The CPS values were obtained by aggregating different patient-level neuropathalogical measturements from their postmortem brains, and it is independent from their scRNA-seq data. 
+The following plots show that the principal curve is related to the neuropathological continuous pseudo-progression score (CPS) provided by the original paper. The CPS values were obtained by aggregating different patient-level neuropathological measurements from their postmortem brains, and it is independent from their scRNA-seq data. 
 
 ```{r message = FALSE, results = 'hide', warning = FALSE, fig.width=7, fig.height=6}
 mdata <- sample_obj@meta.data
