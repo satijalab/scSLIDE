@@ -75,7 +75,9 @@ TrajDETest(object, ...)
 
 \item{...}{additional parameters to be passed to glmGamPoi::glm_gp or filterByExpr}
 
-\item{traj.var}{a data frame containing the trajectory variable of the samples to be tested against}
+\item{traj.var}{For the Seurat method: a single character string naming a column in the object
+metadata. For the Assay/default methods: a data frame (one column) containing the trajectory
+variable of the samples to be tested against.}
 
 \item{latent.vars}{a data frame containing the latent variables (e.g., covariates that might affect the gene expression) to include in regression.}
 
@@ -90,12 +92,13 @@ TrajDETest(object, ...)
 \item{samples}{the cells/samples to be included in the DE test}
 
 \item{logfc.threshold}{Limit testing to genes which show, on average, at least X-fold difference (log-scale)
-between the top and bottom groups of samples (see pro.break.point for details). Default is 0 (i.e., no filtering).}
+between the top and bottom groups of samples (see prob.break.point for details). Default is 0 (i.e., no filtering).}
 
 \item{prob.break.point}{a numeric vector of probability break points with values in (0, 1). It will be used to calculate 2 quantiles
 along the trajectory and to calculate the logfc.}
 
-\item{min.pct}{only test genes that are detected in a minimum fraction of min.pct cells in either of the two populations.}
+\item{min.pct}{only test genes that are detected in a minimum proportion of cells (passed as
+\code{min.prop} to the internal \code{filterByExpr()} filter). Default is 0.1.}
 
 \item{min.count}{Minimum count threshold for gene filtering}
 

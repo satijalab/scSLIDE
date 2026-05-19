@@ -27,7 +27,9 @@ FindmmNN(
 
 \item{dims.list}{A list containing the dimensions for each reduction to use}
 
-\item{k.nn}{The number of nearest neighbors to compute for each modality}
+\item{k.nn}{The number of nearest neighbors to compute for each modality.
+Internally clamped to a minimum of 20 (i.e. values below 20 are silently
+raised to 20).}
 
 \item{knn.range}{Range parameter for nearest neighbor search}
 

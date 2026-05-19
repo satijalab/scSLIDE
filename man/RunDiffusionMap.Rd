@@ -92,7 +92,7 @@ instead of data matrix.}
 \item{reduction.key}{dimensional reduction key, specifies the string before
 the number for the dimension names.}
 
-\item{weight.by.var}{Weight the cell embeddings by the variance of each PC}
+\item{weight.by.var}{Weight the cell embeddings by the eigenvalues of the diffusion map}
 
 \item{verbose}{To print diagnostic messages. Default is TRUE.}
 

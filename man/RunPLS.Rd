@@ -136,8 +136,8 @@ formats as \code{Y}.}
 
 \item{pls.function}{PLS function from pls package to run (options: plsr, spls, cppls)}
 
-\item{verbose}{Print the top genes associated with high/low loadings for
-the components}
+\item{verbose}{Print progress messages, diagnostics (e.g. R2), and the top
+genes associated with high/low loadings for the components}
 
 \item{ndims.print}{components to print genes for}
 

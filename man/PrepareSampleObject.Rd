@@ -49,7 +49,7 @@ falls back to QuickCorTest without grouping. Default is NULL.}
 
 \item{sketch.training}{a boolen to specify whether the function performs sketching for the Seurat object to get a training subset for PLS learning
 (the PLS learned from subset will be projected to the full data). For efficiency, it is recommended to do so when the Seurat object is very
-large. If the 'assay' being specified for this Seurat object is an on-disk assay, this parameter must be set to TRUE. Default is FALSE.}
+large. If the 'assay' being specified for this Seurat object is an on-disk assay, this parameter must be set to TRUE. Default is TRUE.}
 
 \item{group.by.Sketch}{A metadata column name to group cells by before sketching. If NULL,
 falls back to standard sketching without grouping. Default is NULL.}

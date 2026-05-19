@@ -32,8 +32,8 @@
 #'   batch means.  Default \code{FALSE}.  Only used when
 #'   \code{method = "regression"}.
 #' @param floor.beta Floor applied to per-sample \eqn{\beta} estimates.
-#'   Default \code{0} (prevent negative betas).  Set to \code{NULL} to disable.
-#'   Only used when \code{method = "regression"}.
+#'   Default \code{NULL} (no floor).  Set to e.g. \code{0} to prevent negative
+#'   betas.  Only used when \code{method = "regression"}.
 #' @param verbose Print progress messages. Default \code{TRUE}.
 #'
 #' @return The Seurat object with the corrected data written back to the
@@ -561,8 +561,11 @@ CorrectSampleComBat <- function(object,
 #' @param integrate_key A string indicating the smallest batch unit in the meta-data (e.g., library, donor, etc.),
 #' which will be used for integration later.
 #' @param features features to compute corrected expression for. Defaults to the variable features set in the assay specified.
-#' @param control_dict A list indicating the control-group assignment of the controls. The name of each element in the
-#' list should correspond to the batch name in the 'integrate_key' column.
+#' @param control_dict A named list (or character vector) indicating which batches are controls.
+#' Each element is a character vector of batch names (values in the \code{integrate_key} column)
+#' that belong to one control group. The names of the list are arbitrary control-group labels
+#' (e.g. \code{list(ctrl = c("batch1", "batch2"))}). A plain character vector is treated as a
+#' single control group.
 #' @param reduction the name of the DimReduc object we use as the integrated embeddings. Should be from methods like
 #' Harmony or Seurat-integration methods (e.g., CCA).
 #' @param var_cutoff the fraction of explained variance to determine the optimal value of k in truncated SVD when calculating

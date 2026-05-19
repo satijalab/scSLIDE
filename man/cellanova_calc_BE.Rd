@@ -33,8 +33,11 @@ which will be used for integration later.}
 
 \item{features}{features to compute corrected expression for. Defaults to the variable features set in the assay specified.}
 
-\item{control_dict}{A list indicating the control-group assignment of the controls. The name of each element in the
-list should correspond to the batch name in the 'integrate_key' column.}
+\item{control_dict}{A named list (or character vector) indicating which batches are controls.
+Each element is a character vector of batch names (values in the \code{integrate_key} column)
+that belong to one control group. The names of the list are arbitrary control-group labels
+(e.g. \code{list(ctrl = c("batch1", "batch2"))}). A plain character vector is treated as a
+single control group.}
 
 \item{reduction}{the name of the DimReduc object we use as the integrated embeddings. Should be from methods like
 Harmony or Seurat-integration methods (e.g., CCA).}

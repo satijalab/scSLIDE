@@ -6,10 +6,10 @@
 #' @param weighted.nn.name Name of weighted nearest neighbor object
 #' @param landmark.assay.name Name of landmark assay
 #' @param features.to.test Features to test for correlation
-#' @param k.nn Number of nearest neighbors
-#' @param min.dist Minimum distance for UMAP
+#' @param k.nn Number of nearest neighbors. Default is 20.
+#' @param min.dist Minimum distance for UMAP. Default is 0.3.
 #' @param ... Additional arguments
-#' 
+#'
 #' @return Landmark object with UMAP and correlation data
 #' @export
 #' @concept visualization
@@ -264,7 +264,7 @@ SampleLevelDimPlot <- function(
 #'
 #' @param object a Seurat object
 #' @param nn.name the name of the Neighbor object used to generate the UMAP.
-#' @param k.nn the number of neighbors used to genearte the UMAP. If it exceeds the number of k in the nn.name object, will be ignored.
+#' @param k.nn the number of neighbors used to generate the UMAP. If it exceeds the number of k in the nn.name object, will be ignored.
 #' @param landmark.assay.name the name of the sketched assay
 #' @param reduction.name the name of the UMAP to be stored; Note that the projected UMAP will be named as "proj.'reduction.name'".
 #' @param verbose Print progress status

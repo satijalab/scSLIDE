@@ -4,7 +4,9 @@
 #' This function tests for genes that change expression along a continuous trajectory variable.
 #'
 #' @param object Expression data matrix, Assay, StdAssay, or Seurat object
-#' @param traj.var a data frame containing the trajectory variable of the samples to be tested against
+#' @param traj.var For the Seurat method: a single character string naming a column in the object
+#'   metadata. For the Assay/default methods: a data frame (one column) containing the trajectory
+#'   variable of the samples to be tested against.
 #' @param latent.vars a data frame containing the latent variables (e.g., covariates that might affect the gene expression) to include in regression.
 #' @param features Genes to test. Default is to use all genes (after QC)
 #' @param fc.results fc.results calculated by FoldChange(); if not null QC will be performed based on this
@@ -13,10 +15,11 @@
 #' @param layer the data layer to be used for trajectory DE test. Currently only 'counts' is supported.
 #' @param samples the cells/samples to be included in the DE test
 #' @param logfc.threshold Limit testing to genes which show, on average, at least X-fold difference (log-scale)
-#' between the top and bottom groups of samples (see pro.break.point for details). Default is 0 (i.e., no filtering).
+#' between the top and bottom groups of samples (see prob.break.point for details). Default is 0 (i.e., no filtering).
 #' @param prob.break.point a numeric vector of probability break points with values in (0, 1). It will be used to calculate 2 quantiles
 #' along the trajectory and to calculate the logfc.
-#' @param min.pct only test genes that are detected in a minimum fraction of min.pct cells in either of the two populations.
+#' @param min.pct only test genes that are detected in a minimum proportion of cells (passed as
+#'   \code{min.prop} to the internal \code{filterByExpr()} filter). Default is 0.1.
 #' @param min.count Minimum count threshold for gene filtering
 #' @param pseudocount.use Pseudocount to add to averaged expression values when calculating logFC. 1 by default.
 #' @param complete.results Whether to return complete results or summary

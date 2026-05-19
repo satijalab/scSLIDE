@@ -29,9 +29,9 @@ BuildLandmarkObject(
 
 \item{features.to.test}{Features to test for correlation}
 
-\item{k.nn}{Number of nearest neighbors}
+\item{k.nn}{Number of nearest neighbors. Default is 20.}
 
-\item{min.dist}{Minimum distance for UMAP}
+\item{min.dist}{Minimum distance for UMAP. Default is 0.3.}
 
 \item{...}{Additional arguments}
 }

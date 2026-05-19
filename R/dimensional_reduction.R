@@ -13,7 +13,7 @@
 #' @param reduction.key dimensional reduction key, specifies the string before
 #' the number for the dimension names.
 #' @param reduction.name the name of the DimReduc object
-#' @param weight.by.var Weight the cell embeddings by the variance of each PC
+#' @param weight.by.var Weight the cell embeddings by the eigenvalues of the diffusion map
 #' @param verbose To print diagnostic messages. Default is TRUE.
 #' @param seed.use Set a random seed.  Setting NULL will not set a seed.
 #' @param features Features to compute Diffusion Map

@@ -51,8 +51,8 @@ batch means.  Default \code{FALSE}.  Only used when
 \code{method = "regression"}.}
 
 \item{floor.beta}{Floor applied to per-sample \eqn{\beta} estimates.
-Default \code{0} (prevent negative betas).  Set to \code{NULL} to disable.
-Only used when \code{method = "regression"}.}
+Default \code{NULL} (no floor).  Set to e.g. \code{0} to prevent negative
+betas.  Only used when \code{method = "regression"}.}
 
 \item{verbose}{Print progress messages. Default \code{TRUE}.}
 }

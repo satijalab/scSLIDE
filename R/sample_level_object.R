@@ -15,7 +15,7 @@
 #' @param Y A metadata column name of responses. Will also be used as the responses for PLS learning.
 #' @param sketch.training a boolen to specify whether the function performs sketching for the Seurat object to get a training subset for PLS learning
 #'  (the PLS learned from subset will be projected to the full data). For efficiency, it is recommended to do so when the Seurat object is very
-#'  large. If the 'assay' being specified for this Seurat object is an on-disk assay, this parameter must be set to TRUE. Default is FALSE.
+#'  large. If the 'assay' being specified for this Seurat object is an on-disk assay, this parameter must be set to TRUE. Default is TRUE.
 #' @param group.by.Sketch A metadata column name to group cells by before sketching. If NULL,
 #'   falls back to standard sketching without grouping. Default is NULL.
 #' @param ncells.per.group A positive integer, named vector, or list specifying the number of cells to sample.
@@ -101,7 +101,7 @@ PrepareSampleObject <- function(
                                 assay = assay,
                                 ncells = ncells.per.group,
                                 sketched.assay = training.assay.name,
-                                method = "Uniform",
+                                method = training.sketch.method,
                                 group.by = group.by.Sketch,
                                 verbose = verbose,
                                 ...)
@@ -272,6 +272,8 @@ PrepareSampleObject <- function(
 #'
 #' @param object Seurat object
 #' @param nn.name Name of the Neighbor object to use for the calculation
+#'   (e.g. \code{"weighted.nn"} as produced by \code{\link{FindmmNN}} or
+#'   \code{\link{PrepareSampleObject}}).
 #' @param return.seurat Whether to return the data as a Seurat object. Default is TRUE
 #' @param k.nn the number of nearest neighbors to perform the summing
 #' @param sketch.assay the name of the sketch.assay you used to perform the FindmmNN()

@@ -25,7 +25,9 @@ GenerateSampleObject(
 \arguments{
 \item{object}{Seurat object}
 
-\item{nn.name}{Name of the Neighbor object to use for the calculation}
+\item{nn.name}{Name of the Neighbor object to use for the calculation
+(e.g. \code{"weighted.nn"} as produced by \code{\link{FindmmNN}} or
+\code{\link{PrepareSampleObject}}).}
 
 \item{k.nn}{the number of nearest neighbors to perform the summing}
 

@@ -45,7 +45,7 @@ This function applies Chi-squared normalization to a (sample-level) Seurat objec
 landmark-sample pair assuming random distribution, then normalizes observed counts using:
 (observed - expected) / √(expected). The resulting values show how much each landmark's density deviates
 from the expected baseline—density values. Positive values indicate higher-than-expected density,
-negative values indicate lower-than-expected expression.
+negative values indicate lower-than-expected density.
 }
 \examples{
 \dontrun{

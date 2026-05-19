@@ -19,7 +19,7 @@ RunAndProjectUMAP(
 
 \item{nn.name}{the name of the Neighbor object used to generate the UMAP.}
 
-\item{k.nn}{the number of neighbors used to genearte the UMAP. If it exceeds the number of k in the nn.name object, will be ignored.}
+\item{k.nn}{the number of neighbors used to generate the UMAP. If it exceeds the number of k in the nn.name object, will be ignored.}
 
 \item{landmark.assay.name}{the name of the sketched assay}
 

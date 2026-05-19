@@ -4,7 +4,7 @@
 #' landmark-sample pair assuming random distribution, then normalizes observed counts using:
 #' (observed - expected) / √(expected). The resulting values show how much each landmark's density deviates
 #' from the expected baseline—density values. Positive values indicate higher-than-expected density,
-#' negative values indicate lower-than-expected expression.
+#' negative values indicate lower-than-expected density.
 #'
 #' @param object a count matrix (a landmark-sample density matrix), Assay, StdAssay, or Seurat object
 #' @param assay Name of assay to use (for Seurat objects)

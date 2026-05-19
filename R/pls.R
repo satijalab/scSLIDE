@@ -108,8 +108,8 @@
 #'   information about the observations. Only used for cppls. Accepts the same
 #'   formats as \code{Y}.
 #' @param pls.function PLS function from pls package to run (options: plsr, spls, cppls)
-#' @param verbose Print the top genes associated with high/low loadings for
-#' the components
+#' @param verbose Print progress messages, diagnostics (e.g. R2), and the top
+#' genes associated with high/low loadings for the components
 #' @param ndims.print components to print genes for
 #' @param nfeatures.print Number of genes to print for each component
 #' @param reduction.name the name of the DimReduc object
