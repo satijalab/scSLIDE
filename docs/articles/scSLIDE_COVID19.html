@@ -4,63 +4,88 @@
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
-<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Quick start with scSLIDE • scSLIDE</title>
-<script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Quick start with scSLIDE">
+<!-- jquery --><script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" integrity="sha512-v2CJ7UaYy4JwqLDIrZUI/4hqeoQieOmAZNXBeQyjo21dadnwR+8ZaIJVT8EE2iyI61OV8e6M8PP2/4hpQINQ/g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script><!-- Bootstrap --><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.4.1/css/bootstrap.min.css" integrity="sha256-bZLfwXAP04zRMK2BjiO8iu9pf4FbLqX6zitd+tIvLhE=" crossorigin="anonymous">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.4.1/js/bootstrap.min.js" integrity="sha256-nuL8/2cJ5NDSSwnKD8VqreErSWHtnEP9E7AySL+1ev4=" crossorigin="anonymous"></script><!-- bootstrap-toc --><link rel="stylesheet" href="../bootstrap-toc.css">
+<script src="../bootstrap-toc.js"></script><!-- Font Awesome icons --><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css" integrity="sha256-mmgLkCYLUQbXn0B1SRqzHar6dCnv9oZFPEC1g1cwlkk=" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/v4-shims.min.css" integrity="sha256-wZjR52fzng1pJHwx4aV2AO3yyTOXrcDW7jBpJtTwVxw=" crossorigin="anonymous">
+<!-- clipboard.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.6/clipboard.min.js" integrity="sha256-inc5kl9MA1hkeYUt+EC3BhlIgyp/2jDIyBLS6k3UxPI=" crossorigin="anonymous"></script><!-- headroom.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/headroom.min.js" integrity="sha256-AsUX4SJE1+yuDu5+mAVzJbuYNPHj/WroHuZ8Ir/CkE0=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/jQuery.headroom.min.js" integrity="sha256-ZX/yNShbjqsohH1k95liqY9Gd8uOiE1S4vZc+9KQ1K4=" crossorigin="anonymous"></script><!-- pkgdown --><link href="../pkgdown.css" rel="stylesheet">
+<script src="../pkgdown.js"></script><meta property="og:title" content="Quick start with scSLIDE">
+<!-- mathjax --><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js" integrity="sha256-nvJJv9wWKEm88qvoQl9ekL2J+k/RWIsaSScxxlsrv8k=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/config/TeX-AMS-MML_HTMLorMML.js" integrity="sha256-84DKXVJXs0/F8OTMzX4UR909+jtl4G7SPypPavF+GfA=" crossorigin="anonymous"></script><!--[if lt IE 9]>
+<script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+<script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+<![endif]-->
 </head>
-<body>
-    <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
+<body data-spy="scroll" data-target="#toc">
 
 
-    <nav class="navbar navbar-expand-lg fixed-top bg-light" data-bs-theme="light" aria-label="Site navigation"><div class="container">
+    <div class="container template-article">
+      <header><div class="navbar navbar-default navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false">
+        <span class="sr-only">Toggle navigation</span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <span class="navbar-brand">
+        <a class="navbar-link" href="../index.html">scSLIDE</a>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
+      </span>
+    </div>
 
-    <a class="navbar-brand me-2" href="../index.html">scSLIDE</a>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+<li>
+  <a href="../reference/index.html">Reference</a>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Articles
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
-
-
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-
-    <div id="navbar" class="collapse navbar-collapse ms-3">
-      <ul class="navbar-nav me-auto">
-<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
-<li class="active nav-item dropdown">
-  <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/scSLIDE_COVID19.html">Quick start with scSLIDE</a></li>
-<li><a class="dropdown-item" href="../articles/scSLIDE_SEA_AD.html">Applying scSLIDE to large-scale single-cell data</a></li>
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+<li>
+      <a href="../articles/scSLIDE_COVID19.html">Quick start with scSLIDE</a>
+    </li>
+    <li>
+      <a href="../articles/scSLIDE_SEA_AD.html">Applying scSLIDE to large-scale single-cell data</a>
+    </li>
+    <li>
+      <a href="../articles/Using_customized_embedding.html">Generate sample-level density matrix using custom embeddings</a>
+    </li>
   </ul>
 </li>
       </ul>
-<ul class="navbar-nav">
-<li class="nav-item"><form class="form-inline" role="search">
- <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json">
-</form></li>
-<li class="nav-item"><a class="external-link nav-link" href="https://github.com/satijalab/scSLIDE/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
+<ul class="nav navbar-nav navbar-right">
+<li>
+  <a href="https://github.com/satijalab/scSLIDE/" class="external-link">
+    <span class="fab fa-github fa-lg"></span>
+
+  </a>
+</li>
       </ul>
 </div>
-
-
+<!--/.nav-collapse -->
   </div>
-</nav><div class="container template-article">
+<!--/.container -->
+</div>
+<!--/.navbar -->
 
 
 
-
-<div class="row">
-  <main id="main" class="col-md-9"><div class="page-header">
-
-      <h1>Quick start with scSLIDE</h1>
+      </header><div class="row">
+  <div class="col-md-9 contents">
+    <div class="page-header toc-ignore">
+      <h1 data-toc-skip>Quick start with scSLIDE</h1>
             
       
       <small class="dont-index">Source: <a href="https://github.com/satijalab/scSLIDE/blob/HEAD/vignettes/scSLIDE_COVID19.Rmd" class="external-link"><code>vignettes/scSLIDE_COVID19.Rmd</code></a></small>
-      <div class="d-none name"><code>scSLIDE_COVID19.Rmd</code></div>
+      <div class="hidden name"><code>scSLIDE_COVID19.Rmd</code></div>
+
     </div>
 
     
@@ -68,29 +93,12 @@
 <div class="section level2">
 <h2 id="introduction">Introduction<a class="anchor" aria-label="anchor" href="#introduction"></a>
 </h2>
-<p>This vignette walks you through our single-cell Sample-Level
-Integration using Density Estimation (scSLIDE) workflow, a novel
-computational method that performs sample-level analysis for single-cell
-data. Given a multi-sample single-cell disease dataset, this workflow first
-obtains a cell-type-oriented embedding (via reference mapping or
-unsupervised dimension reduction) and a disease-oriented embedding (via
-supervised learning). It then constructs a joint embedding from these
-two embeddings so that cells are embedded into a joint space where their
-distances reflect both cell-type and disease-state similarity. Next, we
-adopt the landmark-based strategy (originally proposed by <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10680595/" class="external-link">Yi &amp;
-Stanley et al bioRxiv</a>), using a randomly sketched subset of cells
-(‘landmarks’) to quantify cell density near each landmark for each
-sample. We end up with a landmark-by-donor matrix whose entries
-represent the cell density near each landmark for each donor.
-Sample-level analyses such as pseudo-trajectory inference and pseudobulk
-differential expression testing can be performed based on this
-sample-level object (also shown below).</p>
+<p>This vignette walks you through our Single-cell Sample-Level Integration using Density Estimation (scSLIDE) workflow, a novel computational method that performs sample-level analysis for single-cell data. Given multi-sample single-cell disease data, this workflow first obtains a cell-type-oriented embedding (via reference mapping or unsupervised dimension reduction) and a disease-oriented embedding (via supervised learning). It then constructs a joint embedding from these two embeddings so that cells are embedded into a joint space where their distances reflect both cell-type and disease-state similarity. Next, we adopt the landmark-based strategy (originally proposed by <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10680595/" class="external-link">Yi &amp; Stanley et al bioRxiv</a>), using a randomly sketched subset of cells (‘landmarks’) to quantify cell density near each landmark for each sample. We end up with a landmark-by-donor matrix whose entries represent the cell density near each landmark for each donor. Sample-level analyses such as pseudo-trajectory inference and pseudobulk differential expression testing can be performed based on this sample-level object (also shown below).</p>
 </div>
 <div class="section level2">
 <h2 id="setup-and-library-loading">Setup and Library Loading<a class="anchor" aria-label="anchor" href="#setup-and-library-loading"></a>
 </h2>
-<p>First, we load all necessary libraries and set up the working
-environment.</p>
+<p>First, we load all necessary libraries and set up the working environment.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># some other packages that will be used in this vignette can be installed using the following commands:</span></span>
 <span><span class="co"># devtools::install_github("satijalab/AzimuthAPI")</span></span>
@@ -112,11 +120,7 @@ environment.</p>
 <div class="section level2">
 <h2 id="data-loading-and-initial-processing">Data Loading and Initial Processing<a class="anchor" aria-label="anchor" href="#data-loading-and-initial-processing"></a>
 </h2>
-<p>We will use a subset (~104k cells) from <a href="https://pubmed.ncbi.nlm.nih.gov/35216673/" class="external-link">Ahern et al 2022
-Cell</a> as an example for our workflow. This subset can be downloaded
-from <a href="https://www.dropbox.com/scl/fi/9tnda21yoy48s0zepvjs4/Raw_count_Subset_104k_Ahern_2022_Cell.rds?rlkey=vfwvjdhyitd4qi8g9clko0hil&st=0vqdh8vx&dl=0" class="external-link">this link</a>. This dataset consists of 40 donors: 10
-healthy controls (‘HV’) and 10 patients from each of 3 different COVID
-severity groups (“MILD”, “SEV”, “CRIT”).</p>
+<p>We will use a subset (~104k cells) from <a href="https://pubmed.ncbi.nlm.nih.gov/35216673/" class="external-link">Ahern et al 2022 Cell</a> as an example for our workflow. This subset can be downloaded from <a href="https://www.dropbox.com/scl/fi/9tnda21yoy48s0zepvjs4/Raw_count_Subset_104k_Ahern_2022_Cell.rds?rlkey=vfwvjdhyitd4qi8g9clko0hil&amp;st=4b03u92v&amp;dl=0" class="external-link">this link</a>. This dataset consists of 40 donors: 10 healthy controls (‘HV’) and 10 patients from each of 3 different COVID severity groups (“MILD”, “SEV”, “CRIT”).</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">object</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"Raw_count_Subset_104k_Ahern_2022_Cell.rds"</span><span class="op">)</span></span></code></pre></div>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
@@ -125,11 +129,7 @@ severity groups (“MILD”, “SEV”, “CRIT”).</p>
 <div class="section level2">
 <h2 id="cell-type-annotation-with-azimuth">Cell Type Annotation with Azimuth<a class="anchor" aria-label="anchor" href="#cell-type-annotation-with-azimuth"></a>
 </h2>
-<p>We use the <a href="https://satijalab.org/pan_human_azimuth/" class="external-link">pan-human Azimuth cloud
-tool</a> to annotate our data and obtain cell-type-oriented embedding.
-Alternatively, users can employ methods like PCA or different
-integration methods to obtain such embedding, and later manually
-annotate the cell types.</p>
+<p>We use the <a href="https://satijalab.org/pan_human_azimuth/" class="external-link">pan-human Azimuth cloud tool</a> to annotate our data and obtain cell-type-oriented embedding. Alternatively, users can employ methods like PCA or different integration methods to obtain such embedding, and later manually annotate the cell types.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">object</span> <span class="op">&lt;-</span> <span class="fu">CloudAzimuth</span><span class="op">(</span><span class="va">object</span><span class="op">)</span></span>
 <span></span>
@@ -139,17 +139,7 @@ annotate the cell types.</p>
 <div class="section level2">
 <h2 id="prepare-the-single-cell-data-for-sample-level-analysis">Prepare the Single-Cell Data for Sample-Level Analysis<a class="anchor" aria-label="anchor" href="#prepare-the-single-cell-data-for-sample-level-analysis"></a>
 </h2>
-<p>To perform all necessary pre-processing steps, we provide a wrapper
-function called <code><a href="../reference/PrepareSampleObject.html">PrepareSampleObject()</a></code>. This function
-prepares a single-cell Seurat object for downstream sample-level density
-analysis. It (optionally) identifies additional highly variable genes
-through correlation testing, creates training and landmark cell subsets
-via sketching methods, performs PLS learning to capture
-response-relevant variation, and constructs a weighted multi-modal
-nearest neighbor graph between landmark cells and the full dataset. The
-function outputs a prepared Seurat object containing the landmark assay
-and a cell-to-landmark WNN graph needed for subsequent sample object
-generation.</p>
+<p>To perform all necessary pre-processing steps, we provide a wrapper function called <code><a href="../reference/PrepareSampleObject.html">PrepareSampleObject()</a></code>. This function prepares a single-cell Seurat object for downstream sample-level density analysis. It (optionally) identifies additional highly variable genes through correlation testing, creates training and landmark cell subsets via sketching methods, performs PLS learning to capture response-relevant variation, and constructs a weighted multi-modal nearest neighbor graph between landmark cells and the full dataset. The function outputs a prepared Seurat object containing the landmark assay and a cell-to-landmark WNN graph needed for subsequent sample object generation.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">object</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/PrepareSampleObject.html">PrepareSampleObject</a></span><span class="op">(</span>object <span class="op">=</span> <span class="va">object</span>, </span>
 <span>                             assay <span class="op">=</span> <span class="st">"RNA"</span>, </span>
@@ -167,51 +157,28 @@ generation.</p>
 <span>                             dims.reduction.1 <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">128</span>,</span>
 <span>                             fix.wnn.weights <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.5</span>, <span class="fl">0.5</span><span class="op">)</span>, </span>
 <span>                             verbose <span class="op">=</span> <span class="cn">T</span><span class="op">)</span></span></code></pre></div>
-<details><summary style="font-size: 18px;"><strong>What does <code>PrepareSampleObject()</code> actually
-do?</strong>
-</summary><p>The <code><a href="../reference/PrepareSampleObject.html">PrepareSampleObject()</a></code> function is a comprehensive
-wrapper that streamlines the data preparation process through four key
-steps:</p>
+<details><p><summary style="font-size: 18px;"><strong>What does <code>PrepareSampleObject()</code> actually do?</strong></summary></p>
+<p>The <code><a href="../reference/PrepareSampleObject.html">PrepareSampleObject()</a></code> function is a comprehensive wrapper that streamlines the data preparation process through four key steps:</p>
 <ol style="list-style-type: decimal">
 <li>
-<strong>Training subset creation:</strong> Performs uniform
-sketching to obtain a representative training subset for efficient PLS
-learning (optional)</li>
+<strong>Training subset creation:</strong> Performs uniform sketching to obtain a representative training subset for efficient PLS learning (optional)</li>
 <li>
-<strong>Landmark cell selection:</strong> Uses leverage-score
-sketching to identify a diverse subset of landmark cells that capture
-the dataset’s heterogeneity</li>
+<strong>Landmark cell selection:</strong> Uses leverage-score sketching to identify a diverse subset of landmark cells that capture the dataset’s heterogeneity</li>
 <li>
-<strong>Response-oriented embedding:</strong> Conducts PLS learning
-to generate embeddings that capture variation relevant to the specified
-response variable</li>
+<strong>Response-oriented embedding:</strong> Conducts PLS learning to generate embeddings that capture variation relevant to the specified response variable</li>
 <li>
-<strong>Neighbor graph construction:</strong> Builds a weighted
-multi-modal nearest neighbor graph connecting landmark cells to all
-other cells in the dataset</li>
+<strong>Neighbor graph construction:</strong> Builds a weighted multi-modal nearest neighbor graph connecting landmark cells to all other cells in the dataset</li>
 </ol>
-<p>The resulting neighbor graph serves as the foundation for generating
-sample-level landmark matrices in downstream analysis.</p>
-<p>For users who need fine-grained control over individual parameters,
-the following step-by-step workflow demonstrates how to manually execute
-each component of <code><a href="../reference/PrepareSampleObject.html">PrepareSampleObject()</a></code> with custom
-settings.</p>
+<p>The resulting neighbor graph serves as the foundation for generating sample-level landmark matrices in downstream analysis.</p>
+<p>For users who need fine-grained control over individual parameters, the following step-by-step workflow demonstrates how to manually execute each component of <code><a href="../reference/PrepareSampleObject.html">PrepareSampleObject()</a></code> with custom settings.</p>
 <div class="section level3">
 <h3 id="data-sketching-procedures">Data Sketching Procedures<a class="anchor" aria-label="anchor" href="#data-sketching-procedures"></a>
 </h3>
-<p>Next, we begin sketching the data using two different procedures. The
-first sketching procedure obtains a random subset of cells from each
-donor (e.g., n = 1000), ensuring that the number of cells is
-approximately equal among donors for supervised learning. This step is
-optional if users believe the cell numbers are already balanced, but we
-recommend it for efficiency considerations.</p>
+<p>Next, we begin sketching the data using two different procedures. The first sketching procedure obtains a random subset of cells from each donor (e.g., n = 1000), ensuring that the number of cells is approximately equal among donors for supervised learning. This step is optional if users believe the cell numbers are already balanced, but we recommend it for efficiency considerations.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">object</span> <span class="op">=</span> <span class="fu"><a href="../reference/SketchDataByGroup.html">SketchDataByGroup</a></span><span class="op">(</span><span class="va">object</span>, assay <span class="op">=</span> <span class="st">"RNA"</span>, ncells <span class="op">=</span> <span class="fl">1000</span>, sketched.assay <span class="op">=</span> <span class="st">"TRAINING"</span>,</span>
 <span>                           method <span class="op">=</span> <span class="st">"Uniform"</span>, group.by <span class="op">=</span> <span class="st">"Donor"</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
-<p>The second sketching procedure performs leverage score-based
-sketching to select a representative subset of cells (called landmark
-cells) that covers the diverse cell states in the data. Later, we will
-generate sample-level embeddings using these landmarks.</p>
+<p>The second sketching procedure performs leverage score-based sketching to select a representative subset of cells (called landmark cells) that covers the diverse cell states in the data. Later, we will generate sample-level embeddings using these landmarks.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">object</span> <span class="op">=</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/SketchData.html" class="external-link">SketchData</a></span><span class="op">(</span><span class="va">object</span>, assay <span class="op">=</span> <span class="st">"TRAINING"</span>, ncells <span class="op">=</span> <span class="fl">2000</span>, sketched.assay <span class="op">=</span> <span class="st">"LANDMARK"</span>,</span>
 <span>                    method <span class="op">=</span> <span class="st">"LeverageScore"</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
@@ -219,10 +186,7 @@ generate sample-level embeddings using these landmarks.</p>
 <div class="section level3">
 <h3 id="disease-relevant-gene-selection">Disease-Relevant Gene Selection<a class="anchor" aria-label="anchor" href="#disease-relevant-gene-selection"></a>
 </h3>
-<p>We can obtain additional disease-relevant genes to enhance PLS
-learning (in case the HVGs are not always relevant). If users believe
-the variable features are already sufficiently informative, they can
-omit this step.</p>
+<p>We can obtain additional disease-relevant genes to enhance PLS learning (in case the HVGs are not always relevant). If users believe the variable features are already sufficiently informative, they can omit this step.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">deg_list</span> <span class="op">=</span> <span class="fu"><a href="../reference/QuickCorTest.html">QuickCorTest</a></span><span class="op">(</span><span class="va">object</span>, assay <span class="op">=</span> <span class="st">"TRAINING"</span>, layer <span class="op">=</span> <span class="st">"data"</span>, group.by <span class="op">=</span> <span class="st">"azimuth_label"</span>, Y <span class="op">=</span> <span class="st">"Disease"</span>, cor.cutoff <span class="op">=</span> <span class="fl">0.2</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="va">all_HVG</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">union</a></span><span class="op">(</span><span class="fu"><a href="https://satijalab.github.io/seurat-object/reference/VariableFeatures.html" class="external-link">VariableFeatures</a></span><span class="op">(</span><span class="va">object</span><span class="op">)</span>, <span class="va">deg_list</span><span class="op">)</span></span></code></pre></div>
@@ -230,11 +194,7 @@ omit this step.</p>
 <div class="section level3">
 <h3 id="supervised-learning-with-partial-least-squares-pls">Supervised Learning with Partial Least Squares (PLS)<a class="anchor" aria-label="anchor" href="#supervised-learning-with-partial-least-squares-pls"></a>
 </h3>
-<p>We apply supervised learning PLS to the TRAINING data and obtain
-disease-oriented low-dimensional embeddings. <code><a href="../reference/RunPLS.html">RunPLS()</a></code>
-supports 3 different PLS algorithms: standard PLS (‘plsr’), canonical
-PLS (‘cppls’), and sparse PLS (‘spls’). Please check the manual of
-<code><a href="../reference/RunPLS.html">RunPLS()</a></code> for details.</p>
+<p>We apply supervised learning PLS to the TRAINING data and obtain disease-oriented low-dimensional embeddings. <code><a href="../reference/RunPLS.html">RunPLS()</a></code> supports 3 different PLS algorithms: standard PLS (‘plsr’), canonical PLS (‘cppls’), and sparse PLS (‘spls’). Please check the manual of <code><a href="../reference/RunPLS.html">RunPLS()</a></code> for details.</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://satijalab.github.io/seurat-object/reference/DefaultAssay.html" class="external-link">DefaultAssay</a></span><span class="op">(</span><span class="va">object</span><span class="op">)</span> <span class="op">=</span> <span class="st">"TRAINING"</span></span>
 <span><span class="va">object</span> <span class="op">=</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/ScaleData.html" class="external-link">ScaleData</a></span><span class="op">(</span><span class="va">object</span>, features <span class="op">=</span> <span class="va">all_HVG</span><span class="op">)</span></span>
@@ -247,8 +207,7 @@ PLS (‘cppls’), and sparse PLS (‘spls’). Please check the manual of
 <div class="section level3">
 <h3 id="projection-to-full-dataset">Projection to Full Dataset<a class="anchor" aria-label="anchor" href="#projection-to-full-dataset"></a>
 </h3>
-<p>Now we project the learned PLS to the full dataset and append the
-projected PLS embeddings.</p>
+<p>Now we project the learned PLS to the full dataset and append the projected PLS embeddings.</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">proj.pls</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/ProjectCellEmbeddings.html" class="external-link">ProjectCellEmbeddings</a></span><span class="op">(</span></span>
 <span>  query <span class="op">=</span> <span class="va">object</span>,</span>
@@ -270,19 +229,7 @@ projected PLS embeddings.</p>
 <div class="section level3">
 <h3 id="joint-embedding-construction-with-weighted-nearest-neighbors">Joint Embedding Construction with Weighted Nearest Neighbors<a class="anchor" aria-label="anchor" href="#joint-embedding-construction-with-weighted-nearest-neighbors"></a>
 </h3>
-<p>After obtaining the cell-type-oriented embeddings and
-disease-oriented embeddings, we will now generate a joint embedding to
-account for both types of information, placing cells in a joint space
-where their distances reflect their similarity. We will use the weighted
-nearest neighbors (WNN) procedure originally developed by Hao &amp; Hao
-et al Cell 2021. Instead of running the original WNN procedure, here we
-modify it so that the ‘modality weights’ of the 2 embeddings are both
-fixed at 0.5, ensuring they contribute equally to the WNN embedding
-(users can modify this to other values or let the algorithm learn it
-dynamically). The function will then return a WNN graph between the
-‘landmark cells’ and all other cells in the dataset. Note that this step
-is time-consuming, so if the single-cell data is large (≥ 200k), please
-consider using the future R package for parallelization.</p>
+<p>After obtaining the cell-type-oriented embeddings and disease-oriented embeddings, we will now generate a joint embedding to account for both types of information, placing cells in a joint space where their distances reflect their similarity. We will use the weighted nearest neighbors (WNN) procedure originally developed by Hao &amp; Hao et al Cell 2021. Instead of running the original WNN procedure, here we modify it so that the ‘modality weights’ of the 2 embeddings are both fixed at 0.5, ensuring they contribute equally to the WNN embedding (users can modify this to other values or let the algorithm learn it dynamically). The function will then return a WNN graph between the ‘landmark cells’ and all other cells in the dataset. Note that this step is time-consuming, so if the single-cell data is large (≥ 200k), please consider using the future R package for parallelization.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://satijalab.github.io/seurat-object/reference/DefaultAssay.html" class="external-link">DefaultAssay</a></span><span class="op">(</span><span class="va">object</span><span class="op">)</span> <span class="op">=</span> <span class="st">"RNA"</span></span>
 <span></span>
@@ -294,8 +241,7 @@ consider using the future R package for parallelization.</p>
 <span>                  dims.list <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">128</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">20</span><span class="op">)</span>,</span>
 <span>                  fix.wnn.weights <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.5</span>, <span class="fl">0.5</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p style="text-align: center; margin-top: 18px;">
-<a href="#" onclick="this.closest('details').open = false; return false;">Click
-here to collapse ▲</a>
+<a href="#" onclick="this.closest('details').open = false; return false;">Click here to collapse ▲</a>
 </p>
 
 </div>
@@ -304,20 +250,8 @@ here to collapse ▲</a>
 <div class="section level2">
 <h2 id="sample-level-object-generation">Sample-Level Object Generation<a class="anchor" aria-label="anchor" href="#sample-level-object-generation"></a>
 </h2>
-<p>Once a WNN graph is constructed, we can generate a sample-level
-density matrix. Given the asymmetric landmark-by-cell WNN graph, scSLIDE
-aggregates over cells to obtain a landmark-by-sample density matrix (m
-landmarks by n samples) by binarizing adjacency (neighbor = 1, else 0)
-and summing per sample. Each entry in this landmark-by-sample matrix
-measures the cell density near each landmark for a given donor.</p>
-<p>The function <code><a href="../reference/GenerateSampleObject.html">GenerateSampleObject()</a></code> automatically
-generates this sample-level object based on the WNN object specified by
-<code>nn.name =</code>. Additionally, it helps users search for
-donor-level metadata from the original single-cell object and append it
-to the sample-level object (optional). It also performs a Chi-squared
-normalization (based on Poisson distribution of a contingency table) for
-the count matrix (optional; standard log-normalization is also
-supported).</p>
+<p>Once a WNN graph is constructed, we can generate a sample-level density matrix. Given the asymmetric landmark-by-cell WNN graph, scSLIDE aggregates over cells to obtain a landmark-by-sample density matrix (m landmarks by n samples) by binarizing adjacency (neighbor = 1, else 0) and summing per sample. Each entry in this landmark-by-sample matrix measures the cell density near each landmark for a given donor.</p>
+<p>The function <code><a href="../reference/GenerateSampleObject.html">GenerateSampleObject()</a></code> automatically generates this sample-level object based on the WNN object specified by <code>nn.name =</code>. Additionally, it helps users search for donor-level metadata from the original single-cell object and append it to the sample-level object (optional). It also performs a Chi-squared normalization (based on Poisson distribution of a contingency table) for the count matrix (optional; standard log-normalization is also supported).</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sample_obj</span> <span class="op">=</span> <span class="fu"><a href="../reference/GenerateSampleObject.html">GenerateSampleObject</a></span><span class="op">(</span>object <span class="op">=</span> <span class="va">object</span>, </span>
 <span>                                  sketch.assay <span class="op">=</span> <span class="st">"LANDMARK"</span>, </span>
@@ -334,28 +268,21 @@ supported).</p>
 <div class="section level2">
 <h2 id="diffusion-map-analysis">Diffusion Map Analysis<a class="anchor" aria-label="anchor" href="#diffusion-map-analysis"></a>
 </h2>
-<p>To better denoise the sample-level data, instead of performing
-standard PCA, we will perform Diffusion Map (a non-linear unsupervised
-dimensional reduction method originally proposed by Haghverdi et al
-Bioinformatics to capture single-cell trajectories).</p>
+<p>To better denoise the sample-level data, instead of performing standard PCA, we will perform Diffusion Map (a non-linear unsupervised dimensional reduction method originally proposed by Haghverdi et al Bioinformatics to capture single-cell trajectories).</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sample_obj</span> <span class="op">=</span> <span class="fu"><a href="../reference/RunDiffusionMap.html">RunDiffusionMap</a></span><span class="op">(</span><span class="va">sample_obj</span>, assay <span class="op">=</span> <span class="st">"LMC"</span>, layer <span class="op">=</span> <span class="st">"scale.data"</span>, features <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="va">sample_obj</span><span class="op">)</span>, ncomp <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span></code></pre></div>
-<p>By visualizing the Diffusion Map components, we can see that DC1
-captures case-control status, DC2 captures some COVID heterogeneity (not
-related to severity), and DC3 captures COVID severity.</p>
+<p>By visualizing the Diffusion Map components, we can see that DC1 captures case-control status, DC2 captures some COVID heterogeneity (not related to severity), and DC3 captures COVID severity.</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://satijalab.org/seurat/reference/DimPlot.html" class="external-link">DimPlot</a></span><span class="op">(</span><span class="va">sample_obj</span>, reduction <span class="op">=</span> <span class="st">"DiffMap"</span>, group.by <span class="op">=</span> <span class="st">"Disease"</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://satijalab.org/seurat/reference/DimPlot.html" class="external-link">DimPlot</a></span><span class="op">(</span><span class="va">sample_obj</span>, reduction <span class="op">=</span> <span class="st">"DiffMap"</span>, group.by <span class="op">=</span> <span class="st">"Disease"</span>, dims <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p><img src="scSLIDE_COVID19_files/figure-html/unnamed-chunk-14-1.png" width="1152"></p>
-<p>We append DC1-3 to the metadata and analyze their relationships with
-clinical variables.</p>
+<p>We append DC1-3 to the metadata and analyze their relationships with clinical variables.</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Append DC1-3 to the metadata</span></span>
 <span><span class="va">sample_obj</span><span class="op">[[</span><span class="st">'traj_DC1'</span><span class="op">]</span><span class="op">]</span> <span class="op">=</span> <span class="va">sample_obj</span><span class="op">@</span><span class="va">reductions</span><span class="op">$</span><span class="va">DiffMap</span><span class="op">@</span><span class="va">cell.embeddings</span><span class="op">[</span>, <span class="fl">1</span><span class="op">]</span></span>
 <span><span class="va">sample_obj</span><span class="op">[[</span><span class="st">'traj_DC2'</span><span class="op">]</span><span class="op">]</span> <span class="op">=</span> <span class="va">sample_obj</span><span class="op">@</span><span class="va">reductions</span><span class="op">$</span><span class="va">DiffMap</span><span class="op">@</span><span class="va">cell.embeddings</span><span class="op">[</span>, <span class="fl">2</span><span class="op">]</span></span>
 <span><span class="va">sample_obj</span><span class="op">[[</span><span class="st">'traj_DC3'</span><span class="op">]</span><span class="op">]</span> <span class="op">=</span> <span class="va">sample_obj</span><span class="op">@</span><span class="va">reductions</span><span class="op">$</span><span class="va">DiffMap</span><span class="op">@</span><span class="va">cell.embeddings</span><span class="op">[</span>, <span class="fl">3</span><span class="op">]</span></span></code></pre></div>
-<p>The following plots show that DC2 is related to TimeSinceOnset and
-DC3 is related to severity:</p>
+<p>The following plots show that DC2 is related to TimeSinceOnset and DC3 is related to severity:</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Showing DC2 is related to TimeSinceOnset and DC3 is related to severity</span></span>
 <span><span class="va">p1</span> <span class="op">=</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/FeatureScatter.html" class="external-link">FeatureScatter</a></span><span class="op">(</span><span class="va">sample_obj</span>, </span>
@@ -373,17 +300,13 @@ DC3 is related to severity:</p>
 <span>        axis.text.x <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>hjust <span class="op">=</span> <span class="fl">1</span>, vjust <span class="op">=</span> <span class="fl">1</span>, angle <span class="op">=</span> <span class="fl">45</span><span class="op">)</span>,</span>
 <span>        axis.text <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fl">13</span><span class="op">)</span><span class="op">)</span> </span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">p1</span> <span class="op">+</span> <span class="va">p2</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Picking joint bandwidth of 0.0286</span></span></code></pre></div>
+<span><span class="co">#&gt; Picking joint bandwidth of 0.0287</span></span></code></pre></div>
 <p><img src="scSLIDE_COVID19_files/figure-html/unnamed-chunk-16-1.png" width="1152"></p>
-<details><summary>
-Fitting a joint pseudo-trajectory using principal curve
-</summary><div class="section level3">
+<details><p><summary>Fitting a joint pseudo-trajectory using principal curve</summary></p>
+<div class="section level3">
 <h3 id="principal-curve-fitting">Principal Curve Fitting<a class="anchor" aria-label="anchor" href="#principal-curve-fitting"></a>
 </h3>
-<p>If you want to explore if multiple DCs and be merged together, we can
-also fit a principal curve to the top few DCs to obtain a joint
-pseudo-trajectory line. Here we are fitting such curve for the top 2
-DCs, and append it to the object.</p>
+<p>If you want to explore if multiple DCs can be merged together, we can also fit a principal curve to the top few DCs to obtain a joint pseudo-trajectory line. Here we are fitting such curve for the top 2 DCs, and append it to the object.</p>
 <div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">princurve_res</span> <span class="op">=</span> <span class="fu">princurve</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/princurve/man/principal_curve.html" class="external-link">principal_curve</a></span><span class="op">(</span><span class="va">sample_obj</span><span class="op">[[</span><span class="st">'DiffMap'</span><span class="op">]</span><span class="op">]</span><span class="op">@</span><span class="va">cell.embeddings</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span>,</span>
 <span>                                           plot <span class="op">=</span> <span class="cn">F</span>, maxit <span class="op">=</span> <span class="fl">20</span>, trace <span class="op">=</span> <span class="cn">T</span><span class="op">)</span></span>
@@ -398,13 +321,8 @@ DCs, and append it to the object.</p>
 <div class="section level2">
 <h2 id="differential-expression-analysis-setup">Differential Expression Analysis Setup<a class="anchor" aria-label="anchor" href="#differential-expression-analysis-setup"></a>
 </h2>
-<p>Finally, we can perform differential expression (DE) analysis to
-extract differentially expressed genes (DEGs) that change along the
-pseudo-trajectory we inferred. We will do this for each individual DC
-separately, since we believe they represent 3 different biological
-variations.</p>
-<p>First, we need to obtain the pseudobulked expression data for the
-original single-cell data:</p>
+<p>Finally, we can perform differential expression (DE) analysis to extract differentially expressed genes (DEGs) that change along the pseudo-trajectory we inferred. We will do this for each individual DC separately, since we believe they represent 3 different biological variations.</p>
+<p>First, we need to obtain the pseudobulked expression data for the original single-cell data:</p>
 <div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">bulk_obj</span> <span class="op">=</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/AggregateExpression.html" class="external-link">AggregateExpression</a></span><span class="op">(</span><span class="va">object</span>, assays <span class="op">=</span> <span class="st">"RNA"</span>, group.by <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Donor"</span>, <span class="st">"azimuth_label"</span><span class="op">)</span>, return.seurat <span class="op">=</span> <span class="cn">T</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Centering and scaling data matrix</span></span></code></pre></div>
@@ -418,12 +336,11 @@ original single-cell data:</p>
 <span><span class="va">bulk_obj</span> <span class="op">=</span> <span class="fu"><a href="https://satijalab.github.io/seurat-object/reference/AddMetaData.html" class="external-link">AddMetaData</a></span><span class="op">(</span><span class="va">bulk_obj</span>, metadata  <span class="op">=</span> <span class="va">mdata</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">bulk_obj</span><span class="op">$</span><span class="va">nCount_RNA</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/colSums.html" class="external-link">colSums</a></span><span class="op">(</span>x <span class="op">=</span> <span class="va">bulk_obj</span>, slot <span class="op">=</span> <span class="st">"counts"</span><span class="op">)</span>  <span class="co"># nCount_RNA</span></span>
-<span><span class="va">bulk_obj</span><span class="op">$</span><span class="va">nFeature_RNA</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/colSums.html" class="external-link">colSums</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fu"><a href="https://satijalab.github.io/seurat-object/reference/Layers.html" class="external-link">LayerData</a></span><span class="op">(</span>object <span class="op">=</span> <span class="va">bulk_obj</span>, layer <span class="op">=</span> <span class="st">"counts"</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span>  <span class="co"># nFeatureRNA</span></span></code></pre></div>
+<span><span class="va">bulk_obj</span><span class="op">$</span><span class="va">nFeature_RNA</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/colSums.html" class="external-link">colSums</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fu"><a href="https://satijalab.github.io/seurat-object/reference/Layers.html" class="external-link">LayerData</a></span><span class="op">(</span>object <span class="op">=</span> <span class="va">bulk_obj</span>, layer <span class="op">=</span> <span class="st">"counts"</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span>  <span class="co"># nFeature_RNA</span></span></code></pre></div>
 <div class="section level3">
 <h3 id="de-analysis-for-cd14-monocytes">DE Analysis for CD14 Monocytes<a class="anchor" aria-label="anchor" href="#de-analysis-for-cd14-monocytes"></a>
 </h3>
-<p>Then we run DE analysis for one cell type at a time. We will use
-“CD14 monocytes” as an example.</p>
+<p>Then we run DE analysis for one cell type at a time. We will use “CD14 monocytes” as an example.</p>
 <div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sub_bulk_obj</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="va">bulk_obj</span>, subset <span class="op">=</span> <span class="va">azimuth_label</span> <span class="op">==</span> <span class="st">"CD14 monocyte"</span><span class="op">)</span></span>
 <span></span>
@@ -435,9 +352,7 @@ original single-cell data:</p>
 <span>                  sort <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="va">sub_bulk_obj</span> <span class="op">=</span> <span class="fu"><a href="https://satijalab.github.io/seurat-object/reference/AddMetaData.html" class="external-link">AddMetaData</a></span><span class="op">(</span><span class="va">sub_bulk_obj</span>, metadata <span class="op">=</span> <span class="va">new_mdata</span><span class="op">)</span></span>
 <span><span class="va">sub_bulk_obj</span><span class="op">$</span><span class="va">log_count</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log10</a></span><span class="op">(</span><span class="va">sub_bulk_obj</span><span class="op">$</span><span class="va">nCount_RNA</span><span class="op">)</span></span></code></pre></div>
-<p>We can now run trajectory DE tests for DC1, DC2, and DC3,
-respectively. Note that we will remove healthy donors when focusing on
-DC2/3 to better focus on within-COVID heterogeneity.</p>
+<p>We can now run trajectory DE tests for DC1, DC2, and DC3, respectively. Note that we will remove healthy donors when focusing on DC2/3 to better focus on within-COVID heterogeneity.</p>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Run trajectory DE test for DC1</span></span>
 <span><span class="va">de_results</span> <span class="op">=</span> <span class="fu"><a href="../reference/TrajDETest.html">TrajDETest</a></span><span class="op">(</span><span class="va">sub_bulk_obj</span>, assay <span class="op">=</span> <span class="st">"RNA"</span>, layer <span class="op">=</span> <span class="st">"counts"</span>,</span>
@@ -452,8 +367,7 @@ DC2/3 to better focus on within-COVID heterogeneity.</p>
 <span><span class="va">de_results3</span> <span class="op">=</span> <span class="fu"><a href="../reference/TrajDETest.html">TrajDETest</a></span><span class="op">(</span><span class="va">sub_bulk_obj</span>, assay <span class="op">=</span> <span class="st">"RNA"</span>, layer <span class="op">=</span> <span class="st">"counts"</span>,</span>
 <span>                         traj.var <span class="op">=</span> <span class="st">"traj_DC3"</span>, latent.vars <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Age"</span>, <span class="st">"Sex"</span>, <span class="st">"log_count"</span><span class="op">)</span>,</span>
 <span>                         samples <span class="op">=</span> <span class="va">non_health_idx</span><span class="op">)</span></span></code></pre></div>
-<p>Now, for the DE results, we will identify the top up- and
-down-regulated DEGs for visualization:</p>
+<p>Now, for the DE results, we will identify the top up- and down-regulated DEGs for visualization:</p>
 <div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Identify the top up- and down-regulated DEGs for visualization</span></span>
 <span><span class="va">de_results</span><span class="op">$</span><span class="va">sign</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sign.html" class="external-link">sign</a></span><span class="op">(</span><span class="va">de_results</span><span class="op">$</span><span class="va">beta_Traj</span><span class="op">)</span></span>
@@ -481,8 +395,7 @@ down-regulated DEGs for visualization:</p>
 <span>                      anno_colors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"#f8766d"</span>, <span class="st">"cornsilk"</span>, <span class="st">"#7cae02"</span>, <span class="st">"blue1"</span>, <span class="st">"#01bfc4"</span>, <span class="st">"#c77cff"</span> <span class="op">)</span><span class="op">)</span>,</span>
 <span>                      hm_colors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"blue"</span>,<span class="st">"white"</span>,<span class="st">"red"</span><span class="op">)</span><span class="op">)</span> </span></code></pre></div>
 <p><img src="scSLIDE_COVID19_files/figure-html/unnamed-chunk-23-1.png" width="960"></p>
-<p>Heatmap visualization for DC2 and DC3 (healthy donors are
-removed):</p>
+<p>Heatmap visualization for DC2 and DC3 (healthy donors are removed):</p>
 <div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Heatmap visualization for DC2 and DC3 (healthy donors are removed)</span></span>
 <span><span class="va">sub_bulk_obj2</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="va">sub_bulk_obj</span>, cells <span class="op">=</span> <span class="va">non_health_idx</span><span class="op">)</span></span>
@@ -505,22 +418,29 @@ removed):</p>
 <p><img src="scSLIDE_COVID19_files/figure-html/unnamed-chunk-24-2.png" width="960"></p>
 </div>
 </div>
-  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
-    </nav></aside>
+  </div>
+
+  <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
+
+      </div>
+
 </div>
 
 
 
-    <footer><div class="pkgdown-footer-left">
-  <p>Developed by Longda Jiang.</p>
+      <footer><div class="copyright">
+  <p></p>
+<p>Developed by Longda Jiang.</p>
 </div>
 
-<div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
+<div class="pkgdown">
+  <p></p>
+<p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.2.</p>
 </div>
 
-    </footer>
+      </footer>
 </div>
+
 
 
 

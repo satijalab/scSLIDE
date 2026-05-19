@@ -1,15 +1,19 @@
 <urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
 <url><loc>/404.html</loc></url>
 <url><loc>/LICENSE-text.html</loc></url>
+<url><loc>/articles/Using_customized_embedding.html</loc></url>
 <url><loc>/articles/index.html</loc></url>
 <url><loc>/articles/scSLIDE_COVID19.html</loc></url>
+<url><loc>/articles/scSLIDE_SEA_AD.html</loc></url>
 <url><loc>/authors.html</loc></url>
 <url><loc>/index.html</loc></url>
 <url><loc>/reference/BuildLandmarkObject.html</loc></url>
+<url><loc>/reference/CorrectSampleComBat.html</loc></url>
 <url><loc>/reference/FindmmNN.html</loc></url>
 <url><loc>/reference/GenerateSampleObject.html</loc></url>
 <url><loc>/reference/NormalizeChiSquared.html</loc></url>
 <url><loc>/reference/PlotLandmarkObject.html</loc></url>
+<url><loc>/reference/PredictPLS.html</loc></url>
 <url><loc>/reference/PrepareSampleObject.html</loc></url>
 <url><loc>/reference/QuickCorTest.html</loc></url>
 <url><loc>/reference/RunAndProjectUMAP.html</loc></url>
@@ -19,7 +23,11 @@
 <url><loc>/reference/SketchDataByGroup.html</loc></url>
 <url><loc>/reference/TrajDETest.html</loc></url>
 <url><loc>/reference/cellanova_calc_BE.html</loc></url>
+<url><loc>/reference/cppls_ondisk.IterableMatrix.html</loc></url>
+<url><loc>/reference/cppls_ondisk.html</loc></url>
 <url><loc>/reference/index.html</loc></url>
+<url><loc>/reference/kernelpls.IterableMatrix.html</loc></url>
+<url><loc>/reference/kernelpls.html</loc></url>
 <url><loc>/reference/scSLIDE-package.html</loc></url>
 </urlset>
 
