@@ -12,9 +12,9 @@ License: MIT + file LICENSE
 URL: https://github.com/satijalab/scSLIDE
 BugReports: https://github.com/satijalab/scSLIDE/issues
 Depends:
-    R (>= 4.0.0),
-    Seurat (>= 5.0.1),
-    SeuratObject (>= 5.0.0)
+    R (>= 4.3.2),
+    Seurat (>= 5.3.1),
+    SeuratObject (>= 5.3.0)
 Imports:
     methods,
     Matrix,
