@@ -1,6 +1,6 @@
 Package: scSLIDE
 Type: Package
-Title: Single Cell Sketching and Landmark Integrated Dimensional Embedding
+Title: Single-cell Sample-Level Integration using Density Estimation
 Version: 0.1.0
 Authors@R: c(
     person(given = "Longda", family = "Jiang", email = "ljiang@nygenome.org", role = c("aut", "cre"), comment = c(ORCID = "0000-0003-4964-6497"))
