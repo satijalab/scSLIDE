@@ -15,7 +15,7 @@ SketchDataByGroup(
   cells = NULL,
   over.write = FALSE,
   seed = 123L,
-  cast = "dgCMatrix",
+  cast = NULL,
   verbose = TRUE,
   features = NULL,
   min.cells.per.group = 10L,
@@ -53,7 +53,11 @@ these user-defined cells will be directly used to generate the sketch, ignoring 
 
 \item{seed}{A positive integer for the seed of the random number generator. Default is 123.}
 
-\item{cast}{The type to cast the resulting assay to. Default is 'dgCMatrix'.}
+\item{cast}{The type to cast the resulting assay to. Default is NULL (no
+casting), which preserves the original matrix format (e.g. on-disk
+BPCells \code{IterableMatrix} objects stay on disk). Set to
+\code{"dgCMatrix"} to force the sketched assay into an in-memory sparse
+matrix.}
 
 \item{verbose}{Print progress and diagnostic messages. Default is TRUE.}
 

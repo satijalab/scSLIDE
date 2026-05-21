@@ -24,7 +24,11 @@
 #'   these user-defined cells will be directly used to generate the sketch, ignoring group.by parameter.
 #' @param over.write Whether to overwrite existing column in the metadata. Default is FALSE.
 #' @param seed A positive integer for the seed of the random number generator. Default is 123.
-#' @param cast The type to cast the resulting assay to. Default is 'dgCMatrix'.
+#' @param cast The type to cast the resulting assay to. Default is NULL (no
+#'   casting), which preserves the original matrix format (e.g. on-disk
+#'   BPCells \code{IterableMatrix} objects stay on disk). Set to
+#'   \code{"dgCMatrix"} to force the sketched assay into an in-memory sparse
+#'   matrix.
 #' @param verbose Print progress and diagnostic messages. Default is TRUE.
 #' @param features A character vector of feature names to include in the sketched assay.
 #' @param min.cells.per.group Minimum number of cells required per group to perform sketching.
@@ -86,7 +90,7 @@ SketchDataByGroup <- function(
     cells = NULL,
     over.write = FALSE,
     seed = 123L,
-    cast = 'dgCMatrix',
+    cast = NULL,
     verbose = TRUE,
     features = NULL,
     min.cells.per.group = 10L,
