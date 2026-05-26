@@ -140,9 +140,9 @@
 #' seurat_obj <- RunPLS(seurat_obj, Y = design_mat, ncomp = 10)
 #' }
 #'
-#' @import pls
+#' @import pls Matrix
 #' @importFrom spls spls
-#' @importFrom stats model.matrix sd
+#' @importFrom stats coef model.matrix median sd uniroot
 #' @importFrom SeuratObject CreateDimReducObject DefaultAssay Assays Cells
 #' @importFrom Seurat LogSeuratCommand
 #' @importFrom utils getFromNamespace
@@ -170,6 +170,7 @@ RunPLS.default <- function(
     seed.use = 42,
     eta = 0.5,
     save.model = FALSE,
+    threads = 1L,
     ...
 ) {
   # Get internal function from Seurat
@@ -292,38 +293,71 @@ RunPLS.IterableMatrix <- function(
     }
     pls.results <- kernelpls(X = object, Y = Y_mat, ncomp = ncomp,
                              threads = threads, ...)
+  } else if (pls.function == "spls") {
+    pls.results <- spls_ondisk(X = object, Y = Y_mat, ncomp = ncomp,
+                                eta = eta, threads = threads, ...)
   } else {
-    rlang::abort("Only pls.function = 'plsr' or 'cppls' is supported for IterableMatrix currently")
+    rlang::abort("Unsupported pls.function for IterableMatrix")
   }
 
-  feature.loadings <- unclass(pls.results$projection)
-  colnames(feature.loadings) <- paste0(reduction.key, seq_len(ncol(feature.loadings)))
-  feature.names <- rownames(object)
-  if (!is.null(feature.names) && length(feature.names) == nrow(feature.loadings)) {
-    rownames(feature.loadings) <- feature.names
-  }
+  if (pls.function == "spls") {
+    # SPLS result extraction (mirrors RunPLS.default spls branch)
+    feature.loadings <- pls.results$projection
+    colnames(feature.loadings) <- paste0(reduction.key, seq_len(ncol(feature.loadings)))
+    feature.names <- rownames(object)
+    if (!is.null(feature.names)) {
+      rownames(feature.loadings) <- feature.names[pls.results$A]
+    }
 
-  cell.embeddings <- unclass(pls.results$scores)
-  colnames(cell.embeddings) <- paste0(reduction.key, seq_len(ncol(cell.embeddings)))
-  sample.names <- colnames(object)
-  if (!is.null(sample.names) && length(sample.names) == nrow(cell.embeddings)) {
-    rownames(cell.embeddings) <- sample.names
-  }
+    # Cell embeddings: use scores from the final PLS sub-fit (already computed
+    # on-disk by kernelpls).  These are t(X[A,]_centered) %*% projection.
+    cell.embeddings <- unclass(pls.results$scores)
+    colnames(cell.embeddings) <- paste0(reduction.key, seq_len(ncol(cell.embeddings)))
+    sample.names <- colnames(object)
+    if (!is.null(sample.names) && length(sample.names) == nrow(cell.embeddings)) {
+      rownames(cell.embeddings) <- sample.names
+    }
 
-  stdev <- pls.results$Xvar
-  r2_rmsep <- .compute_r2_rmsep(Y_mat, pls.results$fitted.values)
-  misc <- list(R2 = r2_rmsep$R2,
-               RMSEP = r2_rmsep$RMSEP)
-  # diagnostic message matching RunPLS.default()
-  R2 <- matrix(r2_rmsep$R2$val, byrow = TRUE, ncol = dim(r2_rmsep$R2$val)[2])
-  mean_final_R2 <- mean(R2[nrow(R2), ])
-  message("The average R2 of the PLS model is ", mean_final_R2)
-  if (save.model) {
-    misc$model <- list(
-      coefficients = pls.results$coefficients,
-      Xmeans = pls.results$Xmeans,
-      Ymeans = pls.results$Ymeans
-    )
+    stdev <- numeric()
+    r2_rmsep <- .compute_r2_rmsep(Y_mat, pls.results$fitted.values)
+    misc <- list(R2 = r2_rmsep$R2,
+                 RMSEP = r2_rmsep$RMSEP)
+    R2 <- matrix(r2_rmsep$R2$val, byrow = TRUE, ncol = dim(r2_rmsep$R2$val)[2])
+    mean_final_R2 <- mean(R2[nrow(R2), ])
+    message("The average R2 of the PLS model is ", mean_final_R2)
+    if (save.model) {
+      warning("save.model is not supported for on-disk spls; model components will not be saved.")
+    }
+  } else {
+    feature.loadings <- unclass(pls.results$projection)
+    colnames(feature.loadings) <- paste0(reduction.key, seq_len(ncol(feature.loadings)))
+    feature.names <- rownames(object)
+    if (!is.null(feature.names) && length(feature.names) == nrow(feature.loadings)) {
+      rownames(feature.loadings) <- feature.names
+    }
+
+    cell.embeddings <- unclass(pls.results$scores)
+    colnames(cell.embeddings) <- paste0(reduction.key, seq_len(ncol(cell.embeddings)))
+    sample.names <- colnames(object)
+    if (!is.null(sample.names) && length(sample.names) == nrow(cell.embeddings)) {
+      rownames(cell.embeddings) <- sample.names
+    }
+
+    stdev <- pls.results$Xvar
+    r2_rmsep <- .compute_r2_rmsep(Y_mat, pls.results$fitted.values)
+    misc <- list(R2 = r2_rmsep$R2,
+                 RMSEP = r2_rmsep$RMSEP)
+    # diagnostic message matching RunPLS.default()
+    R2 <- matrix(r2_rmsep$R2$val, byrow = TRUE, ncol = dim(r2_rmsep$R2$val)[2])
+    mean_final_R2 <- mean(R2[nrow(R2), ])
+    message("The average R2 of the PLS model is ", mean_final_R2)
+    if (save.model) {
+      misc$model <- list(
+        coefficients = pls.results$coefficients,
+        Xmeans = pls.results$Xmeans,
+        Ymeans = pls.results$Ymeans
+      )
+    }
   }
 
   reduction.data <- CreateDimReducObject(
@@ -538,7 +572,7 @@ RunPLS.Seurat <- function(
       feat.mean <- stats$row_stats["mean", ]
       feat.sd <- sqrt(stats$row_stats["variance", ])
     } else {
-      feat.mean <- rowMeans(train.data)
+      feat.mean <- Matrix::rowMeans(train.data)
       feat.sd <- apply(train.data, 1, sd)
     }
 
@@ -555,6 +589,328 @@ RunPLS.Seurat <- function(
   object[[reduction.name]] <- reduction.data
   object <- LogSeuratCommand(object = object)
   return(object)
+}
+
+
+# Univariate soft thresholding (port of spls::ust).
+#
+# Sets elements of b to zero when their absolute value is below
+# eta * max(|b|), and shrinks survivors toward zero.
+#
+# @param b Numeric vector or single-column matrix.
+# @param eta Thresholding parameter in [0, 1).
+# @return A single-column matrix of thresholded values.
+# @keywords internal
+.ust <- function(b, eta) {
+  b_ust <- matrix(0, length(b), 1)
+  if (eta < 1) {
+    valb <- abs(b) - eta * max(abs(b))
+    b_ust[valb >= 0] <- valb[valb >= 0] * (sign(b))[valb >= 0]
+  }
+  b_ust
+}
+
+# Sparse PLS direction vector (port of spls:::spls.dv).
+#
+# Finds a sparse direction vector via soft thresholding and, for multivariate
+# Y, iterative SVD/ridge updates.
+#
+# @param Z Cross-product t(X) %*% Y (p x q).
+# @param eta Sparsity parameter in [0, 1).
+# @param kappa Ridge parameter in (0, 0.5].
+# @param eps Convergence tolerance.
+# @param maxstep Maximum number of iterations.
+# @return A single-column matrix of direction weights (p x 1).
+# @keywords internal
+.spls_dv <- function(Z, eta, kappa, eps, maxstep) {
+  p <- nrow(Z)
+  q <- ncol(Z)
+  Znorm1 <- stats::median(abs(Z))
+  if (Znorm1 == 0) return(matrix(0, p, 1))
+  Z <- Z / Znorm1
+
+  if (q == 1) {
+    return(.ust(Z, eta))
+  }
+
+  # q > 1: multivariate response
+
+  M <- Z %*% t(Z)
+  dis <- 10
+  i <- 1
+
+  if (kappa == 0.5) {
+    cc <- matrix(10, p, 1)
+    cc_old <- cc
+    while (dis > eps && i <= maxstep) {
+      mcsvd <- svd(M %*% cc)
+      a <- mcsvd$u %*% t(mcsvd$v)
+      cc <- .ust(M %*% a, eta)
+      dis <- max(abs(cc - cc_old))
+      cc_old <- cc
+      i <- i + 1
+    }
+  } else if (kappa > 0 && kappa < 0.5) {
+    kappa2 <- (1 - kappa) / (1 - 2 * kappa)
+    cc <- matrix(10, p, 1)
+    cc_old <- cc
+    h <- function(lambda) {
+      alpha <- solve(M + lambda * diag(p)) %*% M %*% cc
+      obj <- t(alpha) %*% alpha - 1 / kappa2^2
+      return(obj)
+    }
+    if (h(eps) * h(1e+30) > 0) {
+      while (h(eps) <= 1e+05) {
+        M <- 2 * M
+        cc <- 2 * cc
+      }
+    }
+    while (dis > eps && i <= maxstep) {
+      if (h(eps) * h(1e+30) > 0) {
+        while (h(eps) <= 1e+05) {
+          M <- 2 * M
+          cc <- 2 * cc
+        }
+      }
+      lambdas <- stats::uniroot(h, c(eps, 1e+30))$root
+      a <- kappa2 * solve(M + lambdas * diag(p)) %*% M %*% cc
+      cc <- .ust(M %*% a, eta)
+      dis <- max(abs(cc - cc_old))
+      cc_old <- cc
+      i <- i + 1
+    }
+  }
+  cc
+}
+
+# Compute t(X_centered) %*% M for an on-disk IterableMatrix X and in-memory M.
+#
+# Uses BPCells' %*% operator and adjusts for centering:
+#   t(X - 1 %*% t(Xmeans)) %*% M  =  t(X) %*% M - Xmeans %*% colSums(M)
+#
+# @param X IterableMatrix (features x samples).
+# @param M Dense matrix (samples x q).
+# @param Xmeans Numeric vector of feature means (length p).
+# @return Dense matrix (p x q).
+# @keywords internal
+.ondisk_crossprod <- function(X, M, Xmeans) {
+  # t(X) %*% M is (features x samples) transposed to (samples x features),
+  # then multiplied by M (samples x q) => features x q ... but we want
+  # t(X_centered) %*% M  where X_centered is (features x samples) centered
+  # so each row has its mean subtracted.
+  # t(X_centered) %*% M = t(X) %*% M - Xmeans %*% t(colSums(M))
+  # But BPCells: X is features x samples, so t(X) is samples x features.
+  # We want (samples x features)' %*% M(samples x q) = features x q
+  # That is:  X %*% M  (since X is features x samples and M is samples x q)
+  raw <- as.matrix(X %*% M)
+  # centering correction: subtract outer(Xmeans, colSums(M))
+  raw - Xmeans %*% t(colSums(M))
+}
+
+#' Sparse Partial Least Squares for On-Disk Matrices
+#'
+#' Generic function for sparse PLS. The \code{IterableMatrix} method computes
+#' sparse PLS for BPCells on-disk matrices using a hybrid R/C++ approach.
+#'
+#' @param X Predictor matrix (or an IterableMatrix).
+#' @param ... Arguments passed to methods.
+#' @export
+spls_ondisk <- function(X, ...) UseMethod("spls_ondisk")
+
+#' Sparse Partial Least Squares for IterableMatrix
+#'
+#' @description
+#' Compute sparse PLS decomposition for large on-disk BPCells matrices.
+#' Uses BPCells for the expensive cross-product operations on disk, while
+#' the sparsity step (direction vector + soft thresholding) and the PLS
+#' sub-regression on active columns run in pure R on small in-memory subsets.
+#'
+#' @param X An IterableMatrix (features x samples, the BPCells convention).
+#' @param Y A matrix or vector of responses (samples x q).
+#' @param ncomp Integer; number of SPLS components to compute.
+#' @param eta Numeric; sparsity parameter in [0, 1). Larger values produce
+#'   sparser solutions. Default 0.5.
+#' @param kappa Numeric; ridge parameter in (0, 0.5]. Default 0.5.
+#' @param fit Character; reserved for compatibility. The on-disk sub-regression
+#'   always uses kernel PLS via \code{\link{kernelpls}}. Default
+#'   \code{"kernelpls"}.
+#' @param center Logical; whether to center X and Y (default \code{TRUE}).
+#'   Note: scaling is not applied for on-disk SPLS.
+#' @param eps Numeric; convergence tolerance for direction vector fitting.
+#'   Default 1e-4.
+#' @param maxstep Integer; maximum iterations for direction vector fitting.
+#'   Default 100.
+#' @param threads Integer; number of threads for BPCells parallel computation.
+#'   Currently unused (reserved for future optimisation). Default 1L.
+#' @param ... Additional arguments (currently unused).
+#'
+#' @return A list with components:
+#' \describe{
+#'   \item{betahat}{Regression coefficients (p x q matrix).}
+#'   \item{A}{Active set: indices of selected features.}
+#'   \item{projection}{Projection matrix from the final PLS sub-fit
+#'     (|A| x ncomp_actual matrix).}
+#'   \item{Xmeans}{Feature means (length p).}
+#'   \item{Ymeans}{Response means (length q).}
+#'   \item{fitted.values}{Fitted Y values (n x q x ncomp array).}
+#'   \item{scores}{X-scores from the final PLS sub-fit.}
+#' }
+#'
+#' @details
+#' Implements the SPLS algorithm (Chun & Keles, 2010) adapted for on-disk
+#' data. Only \code{"pls2"} deflation (Y-deflation) is supported.
+#' The predictor matrix is not scaled (only centered) when on disk; a message
+#' is printed to inform users.
+#'
+#' @references
+#' Chun, H. and Keles, S. (2010) Sparse partial least squares regression for
+#' simultaneous dimension reduction and variable selection.
+#' \emph{Journal of the Royal Statistical Society: Series B}, \bold{72}, 3--25.
+#'
+#' @export
+#' @method spls_ondisk IterableMatrix
+spls_ondisk.IterableMatrix <- function(X, Y, ncomp, eta = 0.5, kappa = 0.5,
+                                        fit = "kernelpls", center = TRUE,
+                                        eps = 1e-4, maxstep = 100L,
+                                        threads = 1L, ...) {
+  if (!requireNamespace("BPCells", quietly = TRUE)) {
+    rlang::abort("Package 'BPCells' is required for spls_ondisk.IterableMatrix but is not installed.")
+  }
+  if (!requireNamespace("pls", quietly = TRUE)) {
+    rlang::abort("Package 'pls' is required for spls_ondisk.IterableMatrix but is not installed.")
+  }
+
+  # --- input validation ---
+  ncomp <- as.integer(ncomp)
+  if (length(ncomp) != 1 || ncomp <= 0) {
+    rlang::abort("ncomp must be a single positive integer")
+  }
+  if (!is.numeric(eta) || length(eta) != 1 || eta < 0 || eta >= 1) {
+    rlang::abort("eta must be a numeric value in [0, 1)")
+  }
+  if (!is.numeric(kappa) || length(kappa) != 1 || kappa <= 0 || kappa > 0.5) {
+    rlang::abort("kappa must be a numeric value in (0, 0.5]")
+  }
+
+  Y <- as.matrix(Y)
+  if (!is.numeric(Y)) {
+    rlang::abort("Y must be numeric")
+  }
+
+  n <- ncol(X)    # samples
+  p <- nrow(X)    # features
+
+  if (n != nrow(Y)) {
+    rlang::abort(sprintf("Number of samples in X (%d) must match nrow(Y) (%d)", n, nrow(Y)))
+  }
+  q <- ncol(Y)
+
+  # Cap ncomp
+  max_ncomp <- min(n - 1L, p)
+  if (ncomp > max_ncomp) {
+    ncomp <- max_ncomp
+    message(sprintf("ncomp capped to %d (min(n-1, p))", ncomp))
+  }
+
+  # On-disk: center only, no scaling
+  message("On-disk SPLS: centering is applied but scaling is not. ",
+          "Results may differ from in-memory spls::spls() which scales by default.")
+
+  # --- compute means and center Y ---
+  if (center) {
+    stats <- BPCells::matrix_stats(X, row_stats = "mean")
+    Xmeans <- stats$row_stats["mean", ]
+    Ymeans <- as.numeric(colMeans(Y))
+    Y_c <- scale(Y, center = Ymeans, scale = FALSE)
+  } else {
+    Xmeans <- rep(0, p)
+    Ymeans <- rep(0, q)
+    Y_c <- Y
+  }
+
+  # --- SPLS iteration ---
+  ip <- seq_len(p)
+  betahat <- matrix(0, p, q)
+  Y1 <- Y_c   # deflated Y (centered)
+  fitted_array <- array(0, dim = c(n, q, ncomp))
+  projection <- NULL
+  A <- integer(0)
+  scores <- NULL
+
+  for (k in seq_len(ncomp)) {
+    # Step 1: compute Z = t(X_centered) %*% Y1  (on-disk pass)
+    Z <- .ondisk_crossprod(X, Y1, Xmeans)
+
+    # Step 2: sparse direction vector (pure R, in-memory)
+    what <- .spls_dv(Z, eta, kappa, eps, maxstep)
+
+    # Step 3: build active set
+    A <- unique(ip[what != 0 | betahat[, 1] != 0])
+
+    if (length(A) == 0) {
+      warning(sprintf("No active features at component %d; stopping early.", k))
+      ncomp <- k - 1L
+      if (ncomp == 0) {
+        rlang::abort("SPLS selected zero features at the first component. Try decreasing eta.")
+      }
+      fitted_array <- fitted_array[, , seq_len(ncomp), drop = FALSE]
+      break
+    }
+
+    # Step 4: subset on-disk X to active features (stays on-disk)
+    X_A <- X[A, , drop = FALSE]  # IterableMatrix, |A| x n
+
+    # Step 5: run kernel-PLS on active subset
+    # kernelpls() requires ncomp < min(n, |A|).  pls::plsr silently
+    # caps at min(n-1, |A|), so we mirror that behaviour here.
+    n_sub_comp <- min(k, length(A), min(n, length(A)) - 1L)
+
+    if (n_sub_comp >= 1L) {
+      # Normal path: use on-disk kernelpls
+      kpls_fit <- kernelpls(X_A, Y_c, ncomp = n_sub_comp,
+                             center = center, threads = threads)
+
+      betahat <- matrix(0, p, q)
+      betahat[A, ] <- kpls_fit$coefficients[, , n_sub_comp, drop = TRUE]
+      projection <- kpls_fit$projection
+      fitted_k <- kpls_fit$fitted.values[, , n_sub_comp, drop = TRUE]
+      dim(fitted_k) <- c(n, q)
+      scores <- kpls_fit$scores
+    } else {
+      # Edge case: |A| == 1 so on-disk kernelpls can't fit even 1 component.
+      # Materialize the single row (negligible memory) and use pls::plsr.
+      X_A_dense <- as.matrix(X_A)
+      if (center) X_A_dense <- X_A_dense - Xmeans[A]
+      plsfit <- pls::plsr(Y_c ~ t(X_A_dense), ncomp = 1L,
+                            method = "kernelpls", scale = FALSE)
+      betahat <- matrix(0, p, q)
+      betahat[A, ] <- matrix(coef(plsfit), length(A), q)
+      projection <- plsfit$projection
+      fitted_k <- t(X_A_dense) %*% betahat[A, , drop = FALSE]
+      dim(fitted_k) <- c(n, q)
+      scores <- unclass(plsfit$scores)
+    }
+
+    # Step 7: deflate Y (pls2 deflation)
+    Y1 <- Y_c - fitted_k
+
+    # Store fitted values (cumulative)
+    fitted_array[, , k] <- fitted_k
+  }
+
+  if (ncomp == 0) {
+    rlang::abort("SPLS produced no components.")
+  }
+
+  list(
+    betahat = betahat,
+    A = A,
+    projection = projection,
+    Xmeans = Xmeans,
+    Ymeans = Ymeans,
+    fitted.values = fitted_array,
+    scores = scores
+  )
 }
 
 

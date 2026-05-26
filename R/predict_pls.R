@@ -203,6 +203,9 @@ PredictPLS.Seurat <- function(
     new.mat <- layer.data[features, ]
     # Apply row-wise centering and scaling via BPCells lazy arithmetic
     if (has.scaling) {
+      # Clip upper bound before scaling to match Seurat ScaleData(scale.max = 10)
+      # scaled = (x - mean) / sd <= 10  iff  x <= 10 * sd + mean
+      new.mat <- BPCells::min_by_row(mat = new.mat, vals = 10 * feat.sd[features] + feat.mean[features])
       new.mat <- (new.mat - feat.mean[features]) / feat.sd[features]
     }
     return(PredictPLS.DimReduc(
@@ -219,6 +222,9 @@ PredictPLS.Seurat <- function(
     new.mat <- scale(new.mat, center = feat.mean[features], scale = feat.sd[features])
     attr(new.mat, "scaled:center") <- NULL
     attr(new.mat, "scaled:scale") <- NULL
+    # Clip to [-10, 10] to match Seurat ScaleData(scale.max = 10) default
+    new.mat[new.mat > 10] <- 10
+    new.mat[new.mat < -10] <- -10
   }
 
   # Delegate to DimReduc method

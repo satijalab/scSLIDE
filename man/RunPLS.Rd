@@ -26,6 +26,7 @@ RunPLS(object, ...)
   seed.use = 42,
   eta = 0.5,
   save.model = FALSE,
+  threads = 1L,
   ...
 )
 
