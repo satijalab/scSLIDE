@@ -1,6 +1,6 @@
 # scSLIDE
 
-**Single-cell Sample-Level Integration using Density Estimation**
+**Single-cell Sample-Level Inference using Density Estimation**
 
 scSLIDE is an R package to perform sample-level analysis for multi-sample single-cell RNA sequencing data. It leverages a semi-supervised dimensional reduction framework to embed cells into a latent space that robustly retains both their underlying type- and state-identity as well as phenotype-driven differences. Each sample is then represented as a probability distribution of cellular states, yielding a sample-level representation that can be directly used for clustering, trajectory inference, and integrative analyses.
 
