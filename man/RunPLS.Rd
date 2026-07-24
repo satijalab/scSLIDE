@@ -88,6 +88,7 @@ RunPLS(object, ...)
   threads = 1L,
   materialize = FALSE,
   materialize.dir = NULL,
+  overwrite = FALSE,
   ...
 )
 
@@ -110,6 +111,7 @@ RunPLS(object, ...)
   threads = 1L,
   materialize = FALSE,
   materialize.dir = NULL,
+  overwrite = FALSE,
   ...
 )
 }
@@ -178,6 +180,12 @@ CellAnova-corrected assay whose on-disk root is a per-sample
 \code{materialize = TRUE}). \code{NULL} (default) writes to a temporary
 directory that is removed after PLS completes; supplying a path keeps the
 matrix there for reuse by downstream steps.}
+
+\item{overwrite}{Logical; only used when \code{materialize = TRUE} and a
+\code{materialize.dir} is supplied. Passed to
+\code{BPCells::write_matrix_dir()} to control whether an existing directory
+may be overwritten. Default \code{FALSE} so that a non-empty
+\code{materialize.dir} is never clobbered without explicit consent.}
 }
 \value{
 Returns a DimReduc object with PLS results

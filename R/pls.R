@@ -134,6 +134,11 @@
 #'   \code{materialize = TRUE}). \code{NULL} (default) writes to a temporary
 #'   directory that is removed after PLS completes; supplying a path keeps the
 #'   matrix there for reuse by downstream steps.
+#' @param overwrite Logical; only used when \code{materialize = TRUE} and a
+#'   \code{materialize.dir} is supplied. Passed to
+#'   \code{BPCells::write_matrix_dir()} to control whether an existing directory
+#'   may be overwritten. Default \code{FALSE} so that a non-empty
+#'   \code{materialize.dir} is never clobbered without explicit consent.
 #' @param ... Additional arguments to be passed to the PLS function
 #'
 #' @return Returns a DimReduc object with PLS results
@@ -424,6 +429,7 @@ RunPLS.StdAssay <- function(
     threads = 1L,
     materialize = FALSE,
     materialize.dir = NULL,
+    overwrite = FALSE,
     ...
 ) {
   # Get internal function from Seurat
@@ -451,7 +457,7 @@ RunPLS.StdAssay <- function(
     if (verbose) {
       message("Materializing on-disk layer to a contiguous store: ", dir)
     }
-    data.use <- BPCells::write_matrix_dir(mat = data.use, dir = dir, overwrite = TRUE)
+    data.use <- BPCells::write_matrix_dir(mat = data.use, dir = dir, overwrite = overwrite)
     if (is.null(materialize.dir)) {
       on.exit(unlink(dir, recursive = TRUE), add = TRUE)
     }
@@ -500,6 +506,7 @@ RunPLS.Seurat <- function(
     threads = 1L,
     materialize = FALSE,
     materialize.dir = NULL,
+    overwrite = FALSE,
     ...
 ) {
   assay <- assay %||% DefaultAssay(object = object)
@@ -560,6 +567,7 @@ RunPLS.Seurat <- function(
     threads = threads,
     materialize = materialize,
     materialize.dir = materialize.dir,
+    overwrite = overwrite,
     ...
   )
 
