@@ -124,6 +124,21 @@
 #'   \code{0} = auto-detect via \code{parallel::detectCores(logical = FALSE)};
 #'   values \eqn{\ge 2} use that many threads. Ignored for in-memory data.
 #' @param layer The layer in `assay` to use when running PLS analysis.
+#' @param materialize Logical; for on-disk (BPCells) assays only. If \code{TRUE},
+#'   the feature-subsetted matrix is written once to a single contiguous BPCells
+#'   store before PLS, instead of re-streaming a fragmented lazy chain on each of
+#'   the ~\code{2*ncomp+3} passes. This can substantially speed up PLS on a
+#'   CellAnova-corrected assay whose on-disk root is a per-sample
+#'   \code{ColBindMatrices}. Ignored for in-memory data. Default \code{FALSE}.
+#' @param materialize.dir Directory for the materialized matrix (only used when
+#'   \code{materialize = TRUE}). \code{NULL} (default) writes to a temporary
+#'   directory that is removed after PLS completes; supplying a path keeps the
+#'   matrix there for reuse by downstream steps.
+#' @param overwrite Logical; only used when \code{materialize = TRUE} and a
+#'   \code{materialize.dir} is supplied. Passed to
+#'   \code{BPCells::write_matrix_dir()} to control whether an existing directory
+#'   may be overwritten. Default \code{FALSE} so that a non-empty
+#'   \code{materialize.dir} is never clobbered without explicit consent.
 #' @param ... Additional arguments to be passed to the PLS function
 #'
 #' @return Returns a DimReduc object with PLS results
@@ -412,17 +427,42 @@ RunPLS.StdAssay <- function(
     eta = 0.5,
     save.model = FALSE,
     threads = 1L,
+    materialize = FALSE,
+    materialize.dir = NULL,
+    overwrite = FALSE,
     ...
 ) {
   # Get internal function from Seurat
   PrepDR5 <- getFromNamespace("PrepDR5", "Seurat")
-  
+
   data.use <- PrepDR5(
     object = object,
     features = features,
     layer = layer,
     verbose = verbose
   )
+
+  # Optional: checkpoint the (feature-subsetted) on-disk matrix to a single
+  # contiguous BPCells store before streaming. RunPLS streams the matrix
+  # ~2*ncomp+3 times; when the source is a fragmented lazy chain (e.g. a
+  # per-sample ColBindMatrices root, as produced by CellAnova correction),
+  # materializing once is far cheaper than re-streaming the fragments each pass.
+  # materialize.dir = NULL writes to a temp dir removed after RunPLS; supplying a
+  # path keeps the matrix for reuse by downstream steps.
+  if (isTRUE(materialize) && inherits(data.use, "IterableMatrix")) {
+    if (!requireNamespace("BPCells", quietly = TRUE)) {
+      rlang::abort("'materialize = TRUE' requires the BPCells package.")
+    }
+    dir <- materialize.dir %||% tempfile(pattern = "scSLIDE_materialize_")
+    if (verbose) {
+      message("Materializing on-disk layer to a contiguous store: ", dir)
+    }
+    data.use <- BPCells::write_matrix_dir(mat = data.use, dir = dir, overwrite = overwrite)
+    if (is.null(materialize.dir)) {
+      on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+    }
+  }
+
   reduction.data <- RunPLS(
     object = data.use,
     assay = assay,
@@ -464,6 +504,9 @@ RunPLS.Seurat <- function(
     eta = 0.5,
     save.model = FALSE,
     threads = 1L,
+    materialize = FALSE,
+    materialize.dir = NULL,
+    overwrite = FALSE,
     ...
 ) {
   assay <- assay %||% DefaultAssay(object = object)
@@ -522,6 +565,9 @@ RunPLS.Seurat <- function(
     eta = eta,
     save.model = save.model,
     threads = threads,
+    materialize = materialize,
+    materialize.dir = materialize.dir,
+    overwrite = overwrite,
     ...
   )
 

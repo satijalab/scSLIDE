@@ -550,7 +550,6 @@ CorrectSampleComBat <- function(object,
 #' expression data.
 #' Most of the procedures are kept the same, with the following modifications:
 #' \itemize{
-#'   \item currently we only support one control group.
 #'   \item we have additionally implemented a future_lapply() and a more efficient regression framework to enhance the efficiency.\cr
 #'   \item the procedure can be done to a "sketched" data and later project to the whole data (for the purposes of efficiency and data balance).\cr
 #' }
@@ -576,6 +575,9 @@ CorrectSampleComBat <- function(object,
 #' @param new.assay.name the name for the new assay to store the corrected expression matrix
 #' @param max_core the number of cores to use for parallel processing. Default is 1 (sequential).
 #' @param future.memory.per.core the maximum memory (in MB) allowed per core for parallel processing. Default is 2000.
+#' @param store.diagnostics Logical; if \code{TRUE} store the intermediate quantities
+#' (\code{M_overall}, \code{DD1}, \code{VV1T}) in the object's \code{@@tools} slot for inspection/debugging.
+#' Default is \code{FALSE} to avoid holding these (\code{VV1T} is genes x k) in the returned object.
 #' @param verbose display progress + messages
 #' @return Returns a Seurat object with a new assay added containing the batch-corrected expression matrix.
 #' When the input layer is an on-disk BPCells IterableMatrix, the corrected assay is stored as a lazy
@@ -593,7 +595,7 @@ CorrectSampleComBat <- function(object,
 cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data", integrate_key = NULL,
                               features = NULL, control_dict = NULL, reduction = NULL, var_cutoff = 0.9, k_max = 1500, k_select = NULL,
                               new.assay.name = "CORRECTED", max_core = 1, future.memory.per.core = 2000,
-                              verbose = TRUE){
+                              store.diagnostics = FALSE, verbose = TRUE){
 
   # Input validation
   if (is.null(object) || !inherits(object, "Seurat")) {
@@ -824,7 +826,6 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
 
   # Clean up intermediate objects to free memory
   rm(overall_bloc_coef, bloc_coef, res, res_temp, M)
-  gc()  # Force garbage collection
 
   ## Perform SVD decomposition for res_combined
   # Helper: try RSpectra::svds(), fall back to base::svd() when ARPACK fails
@@ -913,9 +914,11 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
   VV1T <- final_svds$v[, 1:k, drop = FALSE]
 
   # Store intermediate results in object tools slot for debugging/inspection
-  slot(object = object, name = "tools")[["M_overall"]] <- M_overall
-  slot(object = object, name = "tools")[["DD1"]] <- DD1
-  slot(object = object, name = "tools")[["VV1T"]] <- VV1T
+  if (isTRUE(store.diagnostics)) {
+    slot(object = object, name = "tools")[["M_overall"]] <- M_overall
+    slot(object = object, name = "tools")[["DD1"]] <- DD1
+    slot(object = object, name = "tools")[["VV1T"]] <- VV1T
+  }
 
   if(isTRUE(verbose)) {
     message("Computing batch effect correction...")
@@ -945,10 +948,10 @@ cellanova_calc_BE <- function(object = NULL, assay = NULL, layer = "scale.data",
 
     # correction_coef = proj - small_term  -->  (k x cells)
     correction_coef <- proj - small_term
-    rm(proj, small_term, tVV1T)
+    rm(proj, small_term)
 
     # Build lazy IterableMatrix: corrected = GEX_full - t(row_params) %*% col_params
-    row_params <- base::t(VV1T)   # (k x genes)
+    row_params <- tVV1T            # (k x genes), reuse of t(VV1T) computed above
     col_params <- correction_coef  # (k x cells)
 
     # BPCells' TransformLinearResidual applies row_params/col_params in the

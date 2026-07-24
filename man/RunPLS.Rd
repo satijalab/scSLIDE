@@ -86,6 +86,9 @@ RunPLS(object, ...)
   eta = 0.5,
   save.model = FALSE,
   threads = 1L,
+  materialize = FALSE,
+  materialize.dir = NULL,
+  overwrite = FALSE,
   ...
 )
 
@@ -106,6 +109,9 @@ RunPLS(object, ...)
   eta = 0.5,
   save.model = FALSE,
   threads = 1L,
+  materialize = FALSE,
+  materialize.dir = NULL,
+  overwrite = FALSE,
   ...
 )
 }
@@ -162,6 +168,24 @@ values \eqn{\ge 2} use that many threads. Ignored for in-memory data.}
 \item{features}{Features to compute PLS on}
 
 \item{layer}{The layer in \code{assay} to use when running PLS analysis.}
+
+\item{materialize}{Logical; for on-disk (BPCells) assays only. If \code{TRUE},
+the feature-subsetted matrix is written once to a single contiguous BPCells
+store before PLS, instead of re-streaming a fragmented lazy chain on each of
+the ~\code{2*ncomp+3} passes. This can substantially speed up PLS on a
+CellAnova-corrected assay whose on-disk root is a per-sample
+\code{ColBindMatrices}. Ignored for in-memory data. Default \code{FALSE}.}
+
+\item{materialize.dir}{Directory for the materialized matrix (only used when
+\code{materialize = TRUE}). \code{NULL} (default) writes to a temporary
+directory that is removed after PLS completes; supplying a path keeps the
+matrix there for reuse by downstream steps.}
+
+\item{overwrite}{Logical; only used when \code{materialize = TRUE} and a
+\code{materialize.dir} is supplied. Passed to
+\code{BPCells::write_matrix_dir()} to control whether an existing directory
+may be overwritten. Default \code{FALSE} so that a non-empty
+\code{materialize.dir} is never clobbered without explicit consent.}
 }
 \value{
 Returns a DimReduc object with PLS results

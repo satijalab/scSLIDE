@@ -18,6 +18,7 @@ cellanova_calc_BE(
   new.assay.name = "CORRECTED",
   max_core = 1,
   future.memory.per.core = 2000,
+  store.diagnostics = FALSE,
   verbose = TRUE
 )
 }
@@ -56,6 +57,10 @@ Default is NULL.}
 
 \item{future.memory.per.core}{the maximum memory (in MB) allowed per core for parallel processing. Default is 2000.}
 
+\item{store.diagnostics}{Logical; if \code{TRUE} store the intermediate quantities
+(\code{M_overall}, \code{DD1}, \code{VV1T}) in the object's \code{@tools} slot for inspection/debugging.
+Default is \code{FALSE} to avoid holding these (\code{VV1T} is genes x k) in the returned object.}
+
 \item{verbose}{display progress + messages}
 }
 \value{
@@ -76,7 +81,6 @@ estimate the batch effect from the control samples, and correct for it from the 
 expression data.
 Most of the procedures are kept the same, with the following modifications:
 \itemize{
-\item currently we only support one control group.
 \item we have additionally implemented a future_lapply() and a more efficient regression framework to enhance the efficiency.\cr
 \item the procedure can be done to a "sketched" data and later project to the whole data (for the purposes of efficiency and data balance).\cr
 }
