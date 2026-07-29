@@ -16,7 +16,6 @@ GenerateSampleObject(
   scale.factor = 10000,
   rename.group.by = NULL,
   add.meta.data = TRUE,
-  remove.sketch.cell.from.col = TRUE,
   cells.use = NULL,
   verbose = TRUE,
   ...
@@ -37,8 +36,9 @@ GenerateSampleObject(
 
 \item{new_assay_name}{Name for the new assay containing landmark counts}
 
-\item{group.by}{Category (or vector of categories) for grouping (e.g, Donor ID); 'ident' by default
-To use multiple categories, specify a vector, such as c('batch', 'replicate')}
+\item{group.by}{A single meta-data column to group cells by (e.g. Donor ID); 'ident' by default.
+To group on a combination of columns, add a merged column to the object beforehand and pass
+that, e.g. \code{object$batch_rep <- paste(object$batch, object$replicate, sep = "_")}.}
 
 \item{normalization.method}{Method for normalization. Supports LogNormalize and ChiSquared. see details at
 \code{\link{NormalizeData}} and \code{\link{NormalizeChiSquared}}}
@@ -51,9 +51,6 @@ A suffix of "_LM" + order number will be added automatically.}
 
 \item{add.meta.data}{if TRUE, the function will automatically detect sample-level meta-data (based on 'group.by') and append it
 to the sample-level object; if FALSE, it will not do so.}
-
-\item{remove.sketch.cell.from.col}{if TRUE, the function will detect if the columns of the NN object and remove the cells that
-have been used as the landmark cells.}
 
 \item{cells.use}{An optional character vector of cell names to subset before building
 the sample-level matrix. When non-NULL, only cells in this vector (that are also present
