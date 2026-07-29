@@ -134,6 +134,32 @@ test_that("rename.group.by accepts several columns and uses the first", {
 })
 
 
+test_that("rename.group.by falls back to landmark IDs when no column resolves", {
+  obj <- make_sample_fixture()
+
+  # FetchData() errors when every requested var is missing, so the only way to
+  # empty the intersect() is a column coming back under a different name than
+  # was asked for (FetchData rewrites vars that resolve through a key).
+  local_mocked_bindings(
+    FetchData = function(object, vars, ...) {
+      df <- SeuratObject::FetchData(object = object, vars = vars, ...)
+      if (identical(vars, "sex")) colnames(df) <- "renamed_by_fetchdata"
+      df
+    }
+  )
+
+  expect_warning(
+    mat <- GenerateSampleObject(object = obj, nn.name = "weighted.nn",
+                                group.by = "donor", rename.group.by = "sex",
+                                return.seurat = FALSE),
+    "Cannot find the correct meta-data columns"
+  )
+  # names must fall back to the landmark cell IDs, not become character(0)
+  expect_equal(nrow(mat), 8L)
+  expect_true(all(grepl(pattern = "^cell[0-9]+_LM[0-9]+$", x = rownames(mat))))
+})
+
+
 test_that("group.by must be a single meta-data column", {
   obj <- make_sample_fixture()
 

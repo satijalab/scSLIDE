@@ -411,6 +411,7 @@ GenerateSampleObject <- function(
   }
 
   # assign row and col names to the count matrix
+  landmark.ids <- colnames(object[[sketch.assay]])
   if (!is.null(rename.group.by)) {
     mdata <- FetchData(object = object, vars = rev(x = rename.group.by))
     rename.group.by <- intersect(rename.group.by, colnames(mdata))
@@ -418,14 +419,20 @@ GenerateSampleObject <- function(
       rename.group.by <- rename.group.by[1]
     }
     #
-    rownames(landmark_ct_mat) <- paste0(mdata[colnames(object[[sketch.assay]]), rename.group.by], "_LM", 1:nrow(landmark_ct_mat))
-    rownames(landmark_ct_mat) <- gsub(pattern = "\\s", replacement = "_", rownames(landmark_ct_mat))
-    colnames(landmark_ct_mat) <- colnames(category.matrix)
+    if (length(x = rename.group.by) < 1) {
+      # FetchData can return columns under names other than the ones requested;
+      # fall back to the landmark cell IDs rather than pasting a zero-length vector
+      warning("Cannot find the correct meta-data columns to rename the landmark matrix.")
+      row.labels <- landmark.ids
+    } else {
+      row.labels <- mdata[landmark.ids, rename.group.by]
+    }
   } else {
-    rownames(landmark_ct_mat) <- paste0(colnames(object[[sketch.assay]]), "_LM", 1:nrow(landmark_ct_mat))
-    rownames(landmark_ct_mat) <- gsub(pattern = "\\s", replacement = "_", rownames(landmark_ct_mat))
-    colnames(landmark_ct_mat) <- colnames(category.matrix)
+    row.labels <- landmark.ids
   }
+  rownames(landmark_ct_mat) <- paste0(row.labels, "_LM", 1:nrow(landmark_ct_mat))
+  rownames(landmark_ct_mat) <- gsub(pattern = "\\s", replacement = "_", rownames(landmark_ct_mat))
+  colnames(landmark_ct_mat) <- colnames(category.matrix)
 
   if(return.seurat == FALSE) {
     return(landmark_ct_mat)
