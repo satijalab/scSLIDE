@@ -36,6 +36,9 @@
 #' @param pls.reduction.name PLS dimensional reduction name
 #'
 #' @param k.nn The number of nearest neighbors to compute for each modality
+#' @param knn.range Range parameter for nearest neighbor search. Passed to \code{\link{FindmmNN}}, which
+#'   clamps it to the number of landmark cells if it exceeds that. Default is 200.
+#' @param l2.norm Perform L2 normalization on the cell embeddings during the WNN process. Default is TRUE.
 #' @param weighted.nn.name Multimodal neighbor object name
 #' @param fix.wnn.weights Pre-specified modality weights. If provided, skips the calculation and uses these weights directly.
 #'   Should be a list with the same length as reduction.list.
@@ -51,7 +54,6 @@
 #' @param future.memory.per.core The memory allocation per core for options(future.globals.maxSize = ...), and the calculation 
 #'   is future.globals.maxSize = max_core × future.memory.per.core × 1024 × 1024 bytes. Default is 2000 (unit in MB). 
 #' @param verbose Print progress and diagnostic messages
-#' @param ...	Arguments passed to other methods
 #' @export
 #' @concept scSLIDE
 #' @return return a Seurat object that contains a weighted.nn Neighbor object between the landmark cells and all the other cells.
@@ -79,15 +81,16 @@ PrepareSampleObject <- function(
     pls.function = c("plsr", "spls", "cppls"),
     pls.reduction.name = "pls",
     k.nn = 5,
+    knn.range = 200,
+    l2.norm = TRUE,
     name.reduction.1 = "pca",
     dims.reduction.1 = 1:30,
     weighted.nn.name = "weighted.nn",
     fix.wnn.weights = c(0.5, 0.5),
     rm.training.assay = FALSE,
     max_core = 1,
-    future.memory.per.core = 2000, 
-    verbose = TRUE,
-    ...
+    future.memory.per.core = 2000,
+    verbose = TRUE
 ){
   # house-keeping checks
   assay <- assay[1L] %||% DefaultAssay(object = object)
@@ -103,8 +106,7 @@ PrepareSampleObject <- function(
                                 sketched.assay = training.assay.name,
                                 method = training.sketch.method,
                                 group.by = group.by.Sketch,
-                                verbose = verbose,
-                                ...)
+                                verbose = verbose)
   } else {
     training.assay.name <- assay
   }
@@ -122,8 +124,7 @@ PrepareSampleObject <- function(
                              layer = "data",
                              group.by = group.by.CorTest,
                              Y = Y,
-                             verbose = verbose,
-                             ...)
+                             verbose = verbose)
     all_HVG <- union(VariableFeatures(object), deg_list)
     VariableFeatures(object) <- all_HVG
     #
@@ -144,9 +145,8 @@ PrepareSampleObject <- function(
                        ncells = ncells.landmark,
                        sketched.assay = landmark.assay.name,
                        method = landmark.sketch.method,
-                       features = var_feature, 
-                       verbose = verbose,
-                       ...)
+                       features = var_feature,
+                       verbose = verbose)
 
   # perform PLS learning for the training.assay
   DefaultAssay(object) <- training.assay.name
@@ -159,8 +159,7 @@ PrepareSampleObject <- function(
                    Y = Y,
                    pls.function = pls.function,
                    reduction.name = pls.reduction.name,
-                   verbose = verbose,
-                   ...)
+                   verbose = verbose)
 
   # to project the PLS back to the full data (if we are using a subset of training data)
   if(isTRUE(x = sketch.training)){
@@ -173,8 +172,7 @@ PrepareSampleObject <- function(
       dims = 1:ncomp,
       scale = TRUE,
       normalization.method = "LogNormalize",
-      verbose = verbose,
-      ...
+      verbose = verbose
     )
     # append the projected PLS embeddings to the full data
     object[[paste0("proj.", pls.reduction.name)]] <- CreateDimReducObject(embeddings = proj.pls, key = "pPLS_", assay = assay)
@@ -256,6 +254,8 @@ PrepareSampleObject <- function(
                     sketch.assay = landmark.assay.name,
                     reduction.list = reduction.list,
                     k.nn = k.nn,
+                    knn.range = knn.range,
+                    l2.norm = l2.norm,
                     weighted.nn.name = weighted.nn.name,
                     dims.list = dims.list,
                     fix.wnn.weights = fix.wnn.weights,
@@ -277,8 +277,9 @@ PrepareSampleObject <- function(
 #' @param return.seurat Whether to return the data as a Seurat object. Default is TRUE
 #' @param k.nn the number of nearest neighbors to perform the summing
 #' @param sketch.assay the name of the sketch.assay you used to perform the FindmmNN()
-#' @param group.by Category (or vector of categories) for grouping (e.g, Donor ID); 'ident' by default
-#' To use multiple categories, specify a vector, such as c('batch', 'replicate')
+#' @param group.by A single meta-data column to group cells by (e.g. Donor ID); 'ident' by default.
+#'  To group on a combination of columns, add a merged column to the object beforehand and pass
+#'  that, e.g. \code{object$batch_rep <- paste(object$batch, object$replicate, sep = "_")}.
 #' @param normalization.method Method for normalization. Supports LogNormalize and ChiSquared. see details at
 #' \code{\link{NormalizeData}} and \code{\link{NormalizeChiSquared}}
 #' @param scale.factor Scale factor for Log-Normalization, see \code{\link{NormalizeData}}
@@ -287,8 +288,6 @@ PrepareSampleObject <- function(
 #'  A suffix of "_LM" + order number will be added automatically.
 #' @param add.meta.data if TRUE, the function will automatically detect sample-level meta-data (based on 'group.by') and append it
 #'  to the sample-level object; if FALSE, it will not do so.
-#' @param remove.sketch.cell.from.col if TRUE, the function will detect if the columns of the NN object and remove the cells that
-#'  have been used as the landmark cells.
 #' @param new_assay_name Name for the new assay containing landmark counts
 #' @param cells.use An optional character vector of cell names to subset before building
 #'   the sample-level matrix. When non-NULL, only cells in this vector (that are also present
@@ -316,7 +315,6 @@ GenerateSampleObject <- function(
     scale.factor = 10000,
     rename.group.by = NULL,
     add.meta.data = TRUE,
-    remove.sketch.cell.from.col = TRUE,
     cells.use = NULL,
     verbose = TRUE,
     ...
@@ -324,14 +322,31 @@ GenerateSampleObject <- function(
   # Get internal function from Seurat
   CreateCategoryMatrix <- getFromNamespace("CreateCategoryMatrix", "Seurat")
   
+  normalization.method <- match.arg(arg = normalization.method,
+                                    choices = c("ChiSquared", "LogNormalize"))
+
   # quick check on the group.by
   data <- FetchData(object = object, vars = rev(x = group.by))
   group.by <- intersect(group.by, colnames(data))
   if (length(group.by) < 1) stop("Please specify the correct meta-data column names.")
+  if (length(group.by) > 1) {
+    stop("'group.by' must be a single meta-data column, but got: ",
+         paste(group.by, collapse = ", "), ". To group on a combination of columns, add a ",
+         "merged column to the object beforehand and pass that, e.g. ",
+         "object$batch_rep <- paste(object$batch, object$replicate, sep = \"_\").")
+  }
 
   # get the cells in the nn object
-  if (!nn.name %in% names(object@neighbors)) stop("Please specify the correct name of the NN object.")
+  if (is.null(x = nn.name) || !nn.name %in% names(object@neighbors)) {
+    stop("Please specify the correct name of the NN object.")
+  }
   slct_cells <- Cells(object[[nn.name]])
+  # the NN object must carry at least k.nn neighbours per cell
+  nn.k.available <- ncol(x = object[[nn.name]]@nn.idx)
+  if (k.nn > nn.k.available) {
+    stop("k.nn (", k.nn, ") exceeds the number of neighbors stored in '", nn.name,
+         "' (", nn.k.available, ").")
+  }
 
   # now extract the cell identity based on group.by
   data <- data[slct_cells, , drop = F]
@@ -345,15 +360,12 @@ GenerateSampleObject <- function(
       length(x = levels(x = data[, i]))
     }
   )
-  if (any(num.levels == 1)) {
-    message(
-      paste0(
-        "The following grouping variables have 1 value and will be ignored: ",
-        paste0(colnames(x = data)[which(num.levels <= 1)], collapse = ", ")
-      )
-    )
-    group.by <- rev(colnames(x = data)[which(num.levels > 1)])
-    data <- data[, which(num.levels > 1), drop = F]
+  # 'group.by' is a single column, so a single level leaves nothing to group on
+  if (num.levels < 2) {
+    stop("The grouping variable '", group.by, "' has only one value ('",
+         levels(x = data[, 1]), "') among the cells in '", nn.name,
+         "', so no sample-level grouping is possible. Please choose a meta-data ",
+         "column with at least two values.")
   }
   category.matrix <- CreateCategoryMatrix(labels = data, method = "aggregate")
 
@@ -370,16 +382,14 @@ GenerateSampleObject <- function(
   if (!is.null(cells.use)) {
     keep <- which(colnames(raw_ct_mat) %in% cells.use)
     if (length(keep) == 0) stop("None of the cells in 'cells.use' found in the NN object.")
-    raw_ct_mat <- raw_ct_mat[, keep]
+    raw_ct_mat <- raw_ct_mat[, keep, drop = FALSE]
     if (verbose) message("Subsetting to ", length(keep), " cells from 'cells.use'.")
   }
 
-  # an extra step to remove the cells that have been used as landmarks
-  if (isTRUE(x = remove.sketch.cell.from.col)){
-    rm_col <- which(colnames(raw_ct_mat) %in% rownames(raw_ct_mat))
-    if (length(x = rm_col) > 0){
-      raw_ct_mat <- raw_ct_mat[, -rm_col]
-    }
+  # landmark cells must never be counted towards their own sample
+  rm_col <- which(colnames(raw_ct_mat) %in% rownames(raw_ct_mat))
+  if (length(x = rm_col) > 0){
+    raw_ct_mat <- raw_ct_mat[, -rm_col, drop = FALSE]
   }
 
   # collapse the cell-level matrix into sample-level matrix, based on the category.matrix
@@ -396,33 +406,33 @@ GenerateSampleObject <- function(
       i <- i + 1
       next
     }
-    landmark_ct_mat[, i] <- SeuratObject::rowSums(raw_ct_mat[, cell_idx])
+    landmark_ct_mat[, i] <- SeuratObject::rowSums(raw_ct_mat[, cell_idx, drop = FALSE])
     i <- i + 1
   }
 
   # assign row and col names to the count matrix
+  landmark.ids <- colnames(object[[sketch.assay]])
   if (!is.null(rename.group.by)) {
     mdata <- FetchData(object = object, vars = rev(x = rename.group.by))
     rename.group.by <- intersect(rename.group.by, colnames(mdata))
-    if(rename.group.by > 1) {
+    if(length(x = rename.group.by) > 1) {
       rename.group.by <- rename.group.by[1]
     }
     #
-    if (length(rename.group.by) < 1) {
+    if (length(x = rename.group.by) < 1) {
+      # FetchData can return columns under names other than the ones requested;
+      # fall back to the landmark cell IDs rather than pasting a zero-length vector
       warning("Cannot find the correct meta-data columns to rename the landmark matrix.")
-      rownames(landmark_ct_mat) <- paste0(colnames(object[[sketch.assay]]), "_LM", 1:nrow(landmark_ct_mat))
-      rownames(landmark_ct_mat) <- gsub(pattern = "\\s", replacement = "_", rownames(landmark_ct_mat))
-      colnames(landmark_ct_mat) <- colnames(category.matrix)
+      row.labels <- landmark.ids
     } else {
-      rownames(landmark_ct_mat) <- paste0(mdata[colnames(object[[sketch.assay]]), ], "_LM", 1:nrow(landmark_ct_mat))
-      rownames(landmark_ct_mat) <- gsub(pattern = "\\s", replacement = "_", rownames(landmark_ct_mat))
-      colnames(landmark_ct_mat) <- colnames(category.matrix)
+      row.labels <- mdata[landmark.ids, rename.group.by]
     }
   } else {
-    rownames(landmark_ct_mat) <- paste0(colnames(object[[sketch.assay]]), "_LM", 1:nrow(landmark_ct_mat))
-    rownames(landmark_ct_mat) <- gsub(pattern = "\\s", replacement = "_", rownames(landmark_ct_mat))
-    colnames(landmark_ct_mat) <- colnames(category.matrix)
+    row.labels <- landmark.ids
   }
+  rownames(landmark_ct_mat) <- paste0(row.labels, "_LM", 1:nrow(landmark_ct_mat))
+  rownames(landmark_ct_mat) <- gsub(pattern = "\\s", replacement = "_", rownames(landmark_ct_mat))
+  colnames(landmark_ct_mat) <- colnames(category.matrix)
 
   if(return.seurat == FALSE) {
     return(landmark_ct_mat)

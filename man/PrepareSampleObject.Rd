@@ -22,6 +22,8 @@ PrepareSampleObject(
   pls.function = c("plsr", "spls", "cppls"),
   pls.reduction.name = "pls",
   k.nn = 5,
+  knn.range = 200,
+  l2.norm = TRUE,
   name.reduction.1 = "pca",
   dims.reduction.1 = 1:30,
   weighted.nn.name = "weighted.nn",
@@ -29,8 +31,7 @@ PrepareSampleObject(
   rm.training.assay = FALSE,
   max_core = 1,
   future.memory.per.core = 2000,
-  verbose = TRUE,
-  ...
+  verbose = TRUE
 )
 }
 \arguments{
@@ -81,6 +82,11 @@ See \code{\link{LeverageScore}} for details.}
 
 \item{k.nn}{The number of nearest neighbors to compute for each modality}
 
+\item{knn.range}{Range parameter for nearest neighbor search. Passed to \code{\link{FindmmNN}}, which
+clamps it to the number of landmark cells if it exceeds that. Default is 200.}
+
+\item{l2.norm}{Perform L2 normalization on the cell embeddings during the WNN process. Default is TRUE.}
+
 \item{name.reduction.1}{The name of the DimReduc to use as the 1st embedding (the 2nd is the PLS embedding) in the WNN process.}
 
 \item{dims.reduction.1}{The dimensions for reduction.1 to use during the WNN process.}
@@ -103,8 +109,6 @@ Default is 1 for sequential processing.}
 is future.globals.maxSize = max_core × future.memory.per.core × 1024 × 1024 bytes. Default is 2000 (unit in MB).}
 
 \item{verbose}{Print progress and diagnostic messages}
-
-\item{...}{Arguments passed to other methods}
 }
 \value{
 return a Seurat object that contains a weighted.nn Neighbor object between the landmark cells and all the other cells.

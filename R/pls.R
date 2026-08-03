@@ -187,10 +187,7 @@ RunPLS.default <- function(
     save.model = FALSE,
     ...
 ) {
-  # Get internal function from Seurat
-  CheckDots <- getFromNamespace("CheckDots", "Seurat")
-  
-  CheckDots(..., fxns = pls.function)
+  pls.function <- match.arg(arg = pls.function)
   if (!is.null(x = seed.use)) {
     set.seed(seed = seed.use)
   }
