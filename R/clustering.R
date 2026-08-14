@@ -140,7 +140,7 @@ FindsmNN <- function(
     stop("k.nn must be a integer larger than 1.")
   }
   # prepare for the objects used to search for NN
-  if (is.null(sketch.assay) | !sketch.assay %in% names(object@assays)){
+  if (is.null(sketch.assay) || !sketch.assay %in% names(object@assays)) {
     stop("sketch.assay is not correctly defined. please check.")
   }
   if (!reduction %in% names(object@reductions)){
