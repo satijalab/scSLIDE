@@ -195,7 +195,7 @@ object = FindmmNN(object,
                   sketch.assay = "LANDMARK",
                   reduction.list = list("azimuth_embed", "proj.pls"),
                   k.nn = 5,
-                  weighted.nn.name = "weighted.nn",
+                  nn.name = "weighted.nn",
                   dims.list = list(1:128, 1:20),
                   fix.wnn.weights = c(0.5, 0.5))
 ```

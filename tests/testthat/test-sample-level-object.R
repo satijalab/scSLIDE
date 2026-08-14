@@ -46,18 +46,50 @@ gen <- function(object, ...) {
 }
 
 
-test_that("nn.name must name an existing Neighbor object", {
+test_that("an explicitly named but absent Neighbor object errors", {
   obj <- make_sample_fixture()
 
-  # nn.name is NULL by default, which must not fall through to a length-zero test
-  expect_error(
-    suppressMessages(GenerateSampleObject(object = obj, group.by = "donor")),
-    "correct name of the NN object"
-  )
   expect_error(
     suppressMessages(GenerateSampleObject(object = obj, nn.name = "absent",
                                           group.by = "donor")),
     "correct name of the NN object"
+  )
+})
+
+
+test_that("nn.name = NULL auto-detects the lone default Neighbor object", {
+  obj <- make_sample_fixture()  # carries a single 'weighted.nn'
+
+  # NULL must resolve to the one present default rather than erroring
+  res <- invisible(capture.output(
+    out <- suppressWarnings(suppressMessages(
+      GenerateSampleObject(object = obj, nn.name = NULL, group.by = "donor")
+    ))
+  ))
+  expect_s4_class(out, "Seurat")
+})
+
+
+test_that("nn.name = NULL errors when no default Neighbor object is present", {
+  obj <- make_sample_fixture()
+  obj[["weighted.nn"]] <- NULL  # remove the only default
+
+  expect_error(
+    suppressMessages(GenerateSampleObject(object = obj, nn.name = NULL,
+                                          group.by = "donor")),
+    "No default NN object"
+  )
+})
+
+
+test_that("nn.name = NULL errors when both default Neighbor objects are present", {
+  obj <- make_sample_fixture()
+  obj[["single.nn"]] <- obj[["weighted.nn"]]  # now both defaults exist
+
+  expect_error(
+    suppressMessages(GenerateSampleObject(object = obj, nn.name = NULL,
+                                          group.by = "donor")),
+    "Multiple default NN objects"
   )
 })
 

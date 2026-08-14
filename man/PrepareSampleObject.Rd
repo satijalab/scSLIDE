@@ -21,12 +21,14 @@ PrepareSampleObject(
   ncomp = 10,
   pls.function = c("plsr", "spls", "cppls"),
   pls.reduction.name = "pls",
+  modality = c("multi", "single"),
   k.nn = 5,
   knn.range = 200,
   l2.norm = TRUE,
   name.reduction.1 = "pca",
   dims.reduction.1 = 1:30,
-  weighted.nn.name = "weighted.nn",
+  nn.name = "weighted.nn",
+  weighted.nn.name = NULL,
   fix.wnn.weights = c(0.5, 0.5),
   rm.training.assay = FALSE,
   max_core = 1,
@@ -80,21 +82,30 @@ See \code{\link{LeverageScore}} for details.}
 
 \item{pls.reduction.name}{PLS dimensional reduction name}
 
+\item{modality}{Whether to build the neighbor graph from two modalities or one. \code{"multi"} (default)
+combines \code{name.reduction.1} with the PLS embedding via WNN (\code{\link{FindmmNN}}); \code{"single"}
+uses the PLS embedding alone (\code{\link{FindsmNN}}). In \code{"single"} mode, \code{name.reduction.1},
+\code{dims.reduction.1}, \code{knn.range}, and \code{fix.wnn.weights} are ignored.}
+
 \item{k.nn}{The number of nearest neighbors to compute for each modality}
 
 \item{knn.range}{Range parameter for nearest neighbor search. Passed to \code{\link{FindmmNN}}, which
-clamps it to the number of landmark cells if it exceeds that. Default is 200.}
+clamps it to the number of landmark cells if it exceeds that. Default is 200. Ignored when \code{modality = "single"}.}
 
-\item{l2.norm}{Perform L2 normalization on the cell embeddings during the WNN process. Default is TRUE.}
+\item{l2.norm}{Perform L2 normalization on the cell embeddings during the nearest neighbor process. Default is TRUE.}
 
-\item{name.reduction.1}{The name of the DimReduc to use as the 1st embedding (the 2nd is the PLS embedding) in the WNN process.}
+\item{name.reduction.1}{The name of the DimReduc to use as the 1st embedding (the 2nd is the PLS embedding) in the WNN process.
+Ignored when \code{modality = "single"}.}
 
-\item{dims.reduction.1}{The dimensions for reduction.1 to use during the WNN process.}
+\item{dims.reduction.1}{The dimensions for reduction.1 to use during the WNN process. Ignored when \code{modality = "single"}.}
 
-\item{weighted.nn.name}{Multimodal neighbor object name}
+\item{nn.name}{Name of the output neighbor object. Defaults to \code{"weighted.nn"} for
+\code{modality = "multi"}, and to \code{"single.nn"} for \code{modality = "single"} (unless set explicitly).}
+
+\item{weighted.nn.name}{Deprecated. Use \code{nn.name} instead.}
 
 \item{fix.wnn.weights}{Pre-specified modality weights. If provided, skips the calculation and uses these weights directly.
-Should be a list with the same length as reduction.list.}
+Should be a list with the same length as reduction.list. Ignored when \code{modality = "single"}.}
 
 \item{rm.training.assay}{Whether to remove the training assay after running PrepareSampleObject(). This is used to reduce the
 memory usage when the seurat object is large (e.g., a large on-disk object). Default is FALSE.}
@@ -116,8 +127,14 @@ the Seurat object will also contain a landmark assay (and a training assay if sk
 }
 \description{
 This is a wrapper function to apply landmark sketching, training data sketching (optional), PLS learning,
-and weighted nearest neighbor (WNN) workflow to a single-cell Seurat object to get the necessary components for
+and a nearest neighbor workflow to a single-cell Seurat object to get the necessary components for
 sample-level analyses later. The output object can be directly used by \code{\link{GenerateSampleObject}} to obtain
 a sample-level matrix.
+}
+\details{
+Two modalities are supported (see the \code{modality} argument). The default multi-modal path combines an
+existing reduction (e.g. PCA, via \code{name.reduction.1}) with the PLS embedding using the weighted nearest
+neighbor (WNN) workflow (\code{\link{FindmmNN}}). The single-modal path builds the neighbor graph from the PLS
+embedding alone (\code{\link{FindsmNN}}), which is useful when no complementary reduction is available or desired.
 }
 \concept{scSLIDE}

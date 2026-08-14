@@ -1,9 +1,14 @@
 #' Perform preprocessing procedures for a Seurat object to prepare for the sample-level analysis
 #'
 #' This is a wrapper function to apply landmark sketching, training data sketching (optional), PLS learning,
-#' and weighted nearest neighbor (WNN) workflow to a single-cell Seurat object to get the necessary components for
+#' and a nearest neighbor workflow to a single-cell Seurat object to get the necessary components for
 #' sample-level analyses later. The output object can be directly used by \code{\link{GenerateSampleObject}} to obtain
 #' a sample-level matrix.
+#'
+#' Two modalities are supported (see the \code{modality} argument). The default multi-modal path combines an
+#' existing reduction (e.g. PCA, via \code{name.reduction.1}) with the PLS embedding using the weighted nearest
+#' neighbor (WNN) workflow (\code{\link{FindmmNN}}). The single-modal path builds the neighbor graph from the PLS
+#' embedding alone (\code{\link{FindsmNN}}), which is useful when no complementary reduction is available or desired.
 #'
 #' @param object a Seurat object.
 #' @param assay the assay to perform the analyses on
@@ -34,16 +39,23 @@
 #' @param ncomp Number of components to compute
 #' @param pls.function PLS function from pls package to run (options: plsr, spls, cppls)
 #' @param pls.reduction.name PLS dimensional reduction name
+#' @param modality Whether to build the neighbor graph from two modalities or one. \code{"multi"} (default)
+#'   combines \code{name.reduction.1} with the PLS embedding via WNN (\code{\link{FindmmNN}}); \code{"single"}
+#'   uses the PLS embedding alone (\code{\link{FindsmNN}}). In \code{"single"} mode, \code{name.reduction.1},
+#'   \code{dims.reduction.1}, \code{knn.range}, and \code{fix.wnn.weights} are ignored.
 #'
 #' @param k.nn The number of nearest neighbors to compute for each modality
 #' @param knn.range Range parameter for nearest neighbor search. Passed to \code{\link{FindmmNN}}, which
-#'   clamps it to the number of landmark cells if it exceeds that. Default is 200.
-#' @param l2.norm Perform L2 normalization on the cell embeddings during the WNN process. Default is TRUE.
-#' @param weighted.nn.name Multimodal neighbor object name
+#'   clamps it to the number of landmark cells if it exceeds that. Default is 200. Ignored when \code{modality = "single"}.
+#' @param l2.norm Perform L2 normalization on the cell embeddings during the nearest neighbor process. Default is TRUE.
+#' @param nn.name Name of the output neighbor object. Defaults to \code{"weighted.nn"} for
+#'   \code{modality = "multi"}, and to \code{"single.nn"} for \code{modality = "single"} (unless set explicitly).
+#' @param weighted.nn.name Deprecated. Use \code{nn.name} instead.
 #' @param fix.wnn.weights Pre-specified modality weights. If provided, skips the calculation and uses these weights directly.
-#'   Should be a list with the same length as reduction.list.
+#'   Should be a list with the same length as reduction.list. Ignored when \code{modality = "single"}.
 #' @param name.reduction.1 The name of the DimReduc to use as the 1st embedding (the 2nd is the PLS embedding) in the WNN process.
-#' @param dims.reduction.1 The dimensions for reduction.1 to use during the WNN process.
+#'   Ignored when \code{modality = "single"}.
+#' @param dims.reduction.1 The dimensions for reduction.1 to use during the WNN process. Ignored when \code{modality = "single"}.
 #' @param rm.training.assay Whether to remove the training assay after running PrepareSampleObject(). This is used to reduce the
 #'   memory usage when the seurat object is large (e.g., a large on-disk object). Default is FALSE.
 #' @param max_core The number of cores to use for parallelization when running the WNN process (but not other processes). 
@@ -80,12 +92,14 @@ PrepareSampleObject <- function(
     ncomp = 10,
     pls.function = c("plsr", "spls", "cppls"),
     pls.reduction.name = "pls",
+    modality = c("multi", "single"),
     k.nn = 5,
     knn.range = 200,
     l2.norm = TRUE,
     name.reduction.1 = "pca",
     dims.reduction.1 = 1:30,
-    weighted.nn.name = "weighted.nn",
+    nn.name = "weighted.nn",
+    weighted.nn.name = NULL,
     fix.wnn.weights = c(0.5, 0.5),
     rm.training.assay = FALSE,
     max_core = 1,
@@ -95,8 +109,25 @@ PrepareSampleObject <- function(
   # house-keeping checks
   assay <- assay[1L] %||% DefaultAssay(object = object)
   assay <- match.arg(arg = assay, choices = Assays(object = object))
-  name.reduction.1 <- match.arg(arg = name.reduction.1, choices = names(object@reductions))
+  modality <- match.arg(arg = modality)
+  # reduction.1 is only used for the multi-modal (WNN) path
+  if (identical(modality, "multi")) {
+    name.reduction.1 <- match.arg(arg = name.reduction.1, choices = names(object@reductions))
+  }
   pls.function <- match.arg(arg = pls.function)
+
+  # deprecation shim: 'weighted.nn.name' -> 'nn.name'
+  nn.name.supplied <- !missing(nn.name)
+  if (!is.null(weighted.nn.name)) {
+    warning("'weighted.nn.name' is deprecated; please use 'nn.name' instead.")
+    nn.name <- weighted.nn.name
+    nn.name.supplied <- TRUE
+  }
+
+  # for the single-modality path, avoid the 'weighted' misnomer in the default NN name
+  if (identical(modality, "single") && !nn.name.supplied) {
+    nn.name <- "single.nn"
+  }
 
   # whether to perform sketching to get a subset of the full data for PLS learning
   if(isTRUE(x = sketch.training)){
@@ -185,22 +216,26 @@ PrepareSampleObject <- function(
     gc()
   }
 
-  # to perform multi-modal nearest neighbors between the landmarks and the other cells
-  message("Constructing WNN graph between the landmark cells and all other cells.")
+  # to perform nearest neighbors between the landmarks and the other cells
   DefaultAssay(object) <- assay
-  # get the reduction.list ready
-  if(isTRUE(x = sketch.training)){
-    reduction.list <- list(name.reduction.1, paste0("proj.", pls.reduction.name))
+  # resolve the PLS reduction to use (the projected embedding if we sketched a training subset)
+  pls.reduction.use <- if (isTRUE(x = sketch.training)) paste0("proj.", pls.reduction.name) else pls.reduction.name
+
+  if (identical(modality, "multi")) {
+    message("Constructing WNN graph between the landmark cells and all other cells.")
+    # get the reduction.list ready
+    reduction.list <- list(name.reduction.1, pls.reduction.use)
+    # get the dims.list ready
+    if(dims.reduction.1[length(dims.reduction.1)] > dim(object[[name.reduction.1]])[2]){
+      dims.reduction.1 <- dims.reduction.1[1]:dim(object[[name.reduction.1]])[2]
+      warning("The dims.reduction.1 specified exceeds the number of components in ", name.reduction.1,
+              ", so switching to ", dims.reduction.1[1], ":", dims.reduction.1[length(dims.reduction.1)])
+    }
+    dims.list <- list(dims.reduction.1, 1:ncomp)
   } else {
-    reduction.list <- list(name.reduction.1, pls.reduction.name)
+    message("Constructing single-modality NN graph ('", pls.reduction.use,
+            "') between the landmark cells and all other cells.")
   }
-  # get the dims.list ready
-  if(dims.reduction.1[length(dims.reduction.1)] > dim(object[[name.reduction.1]])[2]){
-    dims.reduction.1 <- dims.reduction.1[1]:dim(object[[name.reduction.1]])[2]
-    warning("The dims.reduction.1 specified exceeds the number of components in ", name.reduction.1,
-            ", so switching to ", dims.reduction.1[1], ":", dims.reduction.1[length(dims.reduction.1)])
-  }
-  dims.list <- list(dims.reduction.1, 1:ncomp)
   
   # ============================================================================
   # Handle future parallelization settings
@@ -249,18 +284,30 @@ PrepareSampleObject <- function(
       }, add = TRUE)
   }
   
-  # run FindmmNN
-  object = FindmmNN(object,
-                    sketch.assay = landmark.assay.name,
-                    reduction.list = reduction.list,
-                    k.nn = k.nn,
-                    knn.range = knn.range,
-                    l2.norm = l2.norm,
-                    weighted.nn.name = weighted.nn.name,
-                    dims.list = dims.list,
-                    fix.wnn.weights = fix.wnn.weights,
-                    verbose = verbose
-                   )
+  # build the NN object between landmarks and all other cells
+  if (identical(modality, "multi")) {
+    object = FindmmNN(object,
+                      sketch.assay = landmark.assay.name,
+                      reduction.list = reduction.list,
+                      k.nn = k.nn,
+                      knn.range = knn.range,
+                      l2.norm = l2.norm,
+                      nn.name = nn.name,
+                      dims.list = dims.list,
+                      fix.wnn.weights = fix.wnn.weights,
+                      verbose = verbose
+                     )
+  } else {
+    object = FindsmNN(object,
+                      sketch.assay = landmark.assay.name,
+                      reduction = pls.reduction.use,
+                      dims = 1:ncomp,
+                      k.nn = k.nn,
+                      l2.norm = l2.norm,
+                      nn.name = nn.name,
+                      verbose = verbose
+                     )
+  }
   # return the object
   return(object)
 }
@@ -272,8 +319,11 @@ PrepareSampleObject <- function(
 #'
 #' @param object Seurat object
 #' @param nn.name Name of the Neighbor object to use for the calculation
-#'   (e.g. \code{"weighted.nn"} as produced by \code{\link{FindmmNN}} or
-#'   \code{\link{PrepareSampleObject}}).
+#'   (e.g. \code{"weighted.nn"} as produced by \code{\link{FindmmNN}} /
+#'   \code{\link{PrepareSampleObject}}, or \code{"single.nn"} as produced by
+#'   \code{\link{FindsmNN}}). If \code{NULL} (default), the function auto-detects
+#'   a Neighbor object named \code{"weighted.nn"} or \code{"single.nn"}; if both
+#'   are present it errors and asks you to specify this parameter.
 #' @param return.seurat Whether to return the data as a Seurat object. Default is TRUE
 #' @param k.nn the number of nearest neighbors to perform the summing
 #' @param sketch.assay the name of the sketch.assay you used to perform the FindmmNN()
@@ -337,7 +387,21 @@ GenerateSampleObject <- function(
   }
 
   # get the cells in the nn object
-  if (is.null(x = nn.name) || !nn.name %in% names(object@neighbors)) {
+  if (is.null(x = nn.name)) {
+    # auto-detect among the default NN object names produced by FindmmNN / FindsmNN
+    default.nn.names <- c("weighted.nn", "single.nn")
+    present.nn <- intersect(default.nn.names, names(object@neighbors))
+    if (length(present.nn) == 0) {
+      stop("No default NN object ('weighted.nn' or 'single.nn') was found. ",
+           "Please specify 'nn.name'.")
+    }
+    if (length(present.nn) > 1) {
+      stop("Multiple default NN objects were found (",
+           paste(present.nn, collapse = ", "),
+           "). Please specify 'nn.name' to disambiguate.")
+    }
+    nn.name <- present.nn
+  } else if (!nn.name %in% names(object@neighbors)) {
     stop("Please specify the correct name of the NN object.")
   }
   slct_cells <- Cells(object[[nn.name]])

@@ -13,7 +13,8 @@ FindmmNN(
   knn.range = 200,
   l2.norm = TRUE,
   fix.wnn.weights = NULL,
-  weighted.nn.name = "weighted.nn",
+  nn.name = "weighted.nn",
+  weighted.nn.name = NULL,
   verbose = TRUE,
   ...
 )
@@ -38,7 +39,9 @@ raised to 20).}
 \item{fix.wnn.weights}{Pre-specified modality weights. If provided, skips the calculation
 and uses these weights directly. Should be a list with the same length as reduction.list.}
 
-\item{weighted.nn.name}{Multimodal neighbor object name}
+\item{nn.name}{Name under which the resulting Neighbor object is stored.}
+
+\item{weighted.nn.name}{Deprecated. Use \code{nn.name} instead.}
 
 \item{verbose}{Print progress bars and output}
 

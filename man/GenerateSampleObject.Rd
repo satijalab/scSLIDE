@@ -25,8 +25,11 @@ GenerateSampleObject(
 \item{object}{Seurat object}
 
 \item{nn.name}{Name of the Neighbor object to use for the calculation
-(e.g. \code{"weighted.nn"} as produced by \code{\link{FindmmNN}} or
-\code{\link{PrepareSampleObject}}).}
+(e.g. \code{"weighted.nn"} as produced by \code{\link{FindmmNN}} /
+\code{\link{PrepareSampleObject}}, or \code{"single.nn"} as produced by
+\code{\link{FindsmNN}}). If \code{NULL} (default), the function auto-detects
+a Neighbor object named \code{"weighted.nn"} or \code{"single.nn"}; if both
+are present it errors and asks you to specify this parameter.}
 
 \item{k.nn}{the number of nearest neighbors to perform the summing}
 
