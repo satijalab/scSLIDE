@@ -8,7 +8,8 @@ SampleLevelDimPlot(
   object = NULL,
   sample.obj = NULL,
   rename.sample = NULL,
-  weighted.nn.name = "weighted.nn",
+  nn.name = "weighted.nn",
+  weighted.nn.name = NULL,
   landmark.assay.name = "LANDMARK",
   features.to.test = NULL,
   order = TRUE,
@@ -28,7 +29,9 @@ SampleLevelDimPlot(
 
 \item{rename.sample}{Optional sample renaming}
 
-\item{weighted.nn.name}{Name of weighted NN object}
+\item{nn.name}{Name of the neighbor object to use}
+
+\item{weighted.nn.name}{Deprecated. Use \code{nn.name} instead.}
 
 \item{landmark.assay.name}{Name of landmark assay}
 

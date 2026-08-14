@@ -3,7 +3,8 @@
 #' @param object Seurat object
 #' @param sample.obj Sample-level Seurat object
 #' @param rename.sample Optional renaming for samples
-#' @param weighted.nn.name Name of weighted nearest neighbor object
+#' @param nn.name Name of the neighbor object to use
+#' @param weighted.nn.name Deprecated. Use \code{nn.name} instead.
 #' @param landmark.assay.name Name of landmark assay
 #' @param features.to.test Features to test for correlation
 #' @param k.nn Number of nearest neighbors. Default is 20.
@@ -23,12 +24,18 @@ BuildLandmarkObject <- function(
     object = NULL,
     sample.obj = NULL,
     rename.sample = NULL,
-    weighted.nn.name = "weighted.nn",
+    nn.name = "weighted.nn",
+    weighted.nn.name = NULL,
     landmark.assay.name = "LANDMARK",
     features.to.test = NULL,
     k.nn = 20,
     min.dist = 0.3,
     ...){
+  # deprecation shim: 'weighted.nn.name' -> 'nn.name'
+  if (!is.null(weighted.nn.name)) {
+    warning("'weighted.nn.name' is deprecated; please use 'nn.name' instead.")
+    nn.name <- weighted.nn.name
+  }
   # first normalize the library size for the sample-level density matrix
   sample.obj <- NormalizeData(sample.obj, ...)
   # and retrieve the normalized matrix
@@ -43,7 +50,7 @@ BuildLandmarkObject <- function(
   landmark_obj <- CreateSeuratObject(counts = CreateAssayObject(data = as.matrix(landmark_mt)))
 
   # next we will retrive the WNN object we previously computed (stored in the single-cell object)
-  landmark_nn <- object[[weighted.nn.name]]
+  landmark_nn <- object[[nn.name]]
   nn.idx <- as.matrix(landmark_nn@nn.idx)
   nn.dist <- as.matrix(landmark_nn@nn.dist)
   # keep only the landmark cells in the NN object
@@ -56,10 +63,10 @@ BuildLandmarkObject <- function(
     alg.info = landmark_nn@alg.info,
     cell.names = colnames(landmark_obj)
   )
-  landmark_obj[[weighted.nn.name]] <- landmark_nn2
+  landmark_obj[[nn.name]] <- landmark_nn2
 
   # and now we will generate UMAP based on the landmark-only WNN graph
-  landmark_obj <- RunUMAP(landmark_obj, nn.name = weighted.nn.name, reduction.name = "wnn.umap", reduction.key = "wnnUMAP_",
+  landmark_obj <- RunUMAP(landmark_obj, nn.name = nn.name, reduction.name = "wnn.umap", reduction.key = "wnnUMAP_",
                           min.dist = min.dist)
   # paste the meta-data of the landmark cells
   landmark_obj <- AddMetaData(landmark_obj, metadata = object@meta.data[colnames(object[[landmark.assay.name]]), ])
@@ -193,7 +200,8 @@ PlotLandmarkObject <- function(
 #' @param object Seurat object
 #' @param sample.obj Sample-level Seurat object
 #' @param rename.sample Optional sample renaming
-#' @param weighted.nn.name Name of weighted NN object
+#' @param nn.name Name of the neighbor object to use
+#' @param weighted.nn.name Deprecated. Use \code{nn.name} instead.
 #' @param landmark.assay.name Name of landmark assay
 #' @param features.to.test Features to test for correlation
 #' @param order Whether to order points
@@ -213,7 +221,8 @@ SampleLevelDimPlot <- function(
     object = NULL,
     sample.obj = NULL,
     rename.sample = NULL,
-    weighted.nn.name = "weighted.nn",
+    nn.name = "weighted.nn",
+    weighted.nn.name = NULL,
     landmark.assay.name = "LANDMARK",
     features.to.test = NULL,
     order = TRUE,
@@ -225,12 +234,18 @@ SampleLevelDimPlot <- function(
     min.dist = 0.3,
     ...){
 
+  # deprecation shim: 'weighted.nn.name' -> 'nn.name'
+  if (!is.null(weighted.nn.name)) {
+    warning("'weighted.nn.name' is deprecated; please use 'nn.name' instead.")
+    nn.name <- weighted.nn.name
+  }
+
   # Build the landmark object with correlation analysis
   landmark_obj <- BuildLandmarkObject(
     object = object,
     sample.obj = sample.obj,
     rename.sample = rename.sample,
-    weighted.nn.name = weighted.nn.name,
+    nn.name = nn.name,
     landmark.assay.name = landmark.assay.name,
     features.to.test = features.to.test,
     k.nn = k.nn,
