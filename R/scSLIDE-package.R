@@ -38,3 +38,11 @@
     rhs
   }
 }
+
+.onAttach <- function(libname, pkgname) {
+  packageStartupMessage(
+    "scSLIDE is archived and no longer maintained.\n",
+    "It is now part of Seurat v6 (available on CRAN), with the same function names.\n",
+    "Please use Seurat v6 for the latest version: install.packages(\"Seurat\")"
+  )
+}

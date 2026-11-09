@@ -7,6 +7,8 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
+> **Note:** scSLIDE is archived and is now part of [Seurat v6](https://github.com/satijalab/seurat) (available on CRAN). The same functions are available in Seurat v6 with mostly the same usage. Please use Seurat v6 for new analyses.
+
 ## Introduction
 
 This vignette walks you through our Single-cell Sample-Level Integration using Density Estimation (scSLIDE) workflow, a novel computational method that performs sample-level analysis for single-cell data. Given multi-sample single-cell disease data, this workflow first obtains a cell-type-oriented embedding (via reference mapping or unsupervised dimension reduction) and a disease-oriented embedding (via supervised learning). It then constructs a joint embedding from these two embeddings so that cells are embedded into a joint space where their distances reflect both cell-type and disease-state similarity. Next, we adopt the landmark-based strategy (originally proposed by [Yi & Stanley et al bioRxiv](https://pmc.ncbi.nlm.nih.gov/articles/PMC10680595/)), using a randomly sketched subset of cells ('landmarks') to quantify cell density near each landmark for each sample. We end up with a landmark-by-donor matrix whose entries represent the cell density near each landmark for each donor. Sample-level analyses such as pseudo-trajectory inference and pseudobulk differential expression testing can be performed based on this sample-level object (also shown below).
