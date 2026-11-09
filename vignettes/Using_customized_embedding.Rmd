@@ -7,6 +7,8 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
+> **Note:** scSLIDE is archived and is now part of [Seurat v6](https://github.com/satijalab/seurat) (available on CRAN). The same functions are available in Seurat v6 with mostly the same usage. Please use Seurat v6 for new analyses.
+
 By default, scSLIDE uses WNN embedding to create the sample-level density matrix. However, you can use your own custom embedding instead. For example, you might want to build the sample-level matrix using a harmony-corrected PCA space from your single-cell data. Below is a general workflow. Note that we skip the steps for creating the custom embedding, since this varies depending on the method you choose.
 
 ```{r setup, eval=FALSE}

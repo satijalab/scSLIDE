@@ -7,6 +7,8 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
+> **Note:** scSLIDE is archived and is now part of [Seurat v6](https://github.com/satijalab/seurat) (available on CRAN). The same functions are available in Seurat v6 with mostly the same usage. Please use Seurat v6 for new analyses.
+
 ## Introduction
 
 This vignette will illustrate how to utilize the [BPCells](https://satijalab.org/seurat/articles/seurat5_bpcells_interaction_vignette) (developed by [Benjamin Parks](https://github.com/bnprks/BPCells)) functionality in Seurat to apply scSLIDE to large-scale single-cell data. We will also utilize [future R-package](https://cran.r-project.org/web/packages/future/index.html)'s parallelization to improve the runtime. We will be using a publicly available [Alzheimer's disease snRNA-seq dataset from the Allen Brain Institute](https://www.nature.com/articles/s41593-024-01774-5) for demonstration.

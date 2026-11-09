@@ -1,5 +1,20 @@
 # scSLIDE
 
+> [!IMPORTANT]
+> **This repository is archived and no longer maintained.**
+> scSLIDE is now part of [Seurat v6](https://github.com/satijalab/seurat), which is available on CRAN.
+> Please use Seurat v6 for the latest version, bug fixes, and support.
+> This repository is kept read-only so earlier analyses can be reproduced.
+
+## Migrating to Seurat v6
+
+```r
+install.packages("Seurat")  # Seurat v6 from CRAN
+library(Seurat)
+```
+
+The scSLIDE functions (e.g. `PrepareSampleObject`, `GenerateSampleObject`, `RunPLS`, `TrajDETest`) keep the same names in Seurat v6, and most usage is unchanged. In most cases you can simply replace `library(scSLIDE)` with `library(Seurat)`. Please refer to the Seurat documentation for any differences.
+
 **Single-cell Sample-Level Inference using Density Estimation**
 
 scSLIDE is an R package to perform sample-level analysis for multi-sample single-cell RNA sequencing data. It leverages a semi-supervised dimensional reduction framework to embed cells into a latent space that robustly retains both their underlying type- and state-identity as well as phenotype-driven differences. Each sample is then represented as a probability distribution of cellular states, yielding a sample-level representation that can be directly used for clustering, trajectory inference, and integrative analyses.
@@ -17,7 +32,9 @@ scSLIDE is an R package to perform sample-level analysis for multi-sample single
 ### Novel Differential Expression Test
 - **TrajDETest**: Trajectory-based differential expression analysis using negative binomial regression
 
-## Installation
+## Installation (legacy)
+
+The instructions below install the final archived version of scSLIDE. For new analyses, use Seurat v6 instead (see above).
 
 ```r
 # Install BiocManager if not already installed
@@ -68,4 +85,4 @@ MIT License - see LICENSE file for details.
 
 ## Support
 
-For questions and support, please open an issue on the GitHub repository.
+This repository is archived. For questions and support, please open an issue on the [Seurat GitHub repository](https://github.com/satijalab/seurat/issues).
