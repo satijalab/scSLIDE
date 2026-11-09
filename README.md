@@ -74,10 +74,7 @@ A tutorial for running the scSLIDE package is provided [here](https://satijalab.
 ## Citation
 
 If you use scSLIDE in your research, please cite:
-
-```
-https://doi.org/10.64898/2025.12.10.693462
-```
+[Jiang, Longda, et al. "Reconstructing developmental and disease progression with sample-level embeddings." Cell (2026)](https://doi.org/10.1016/j.cell.2026.10.018)
 
 ## License
 
